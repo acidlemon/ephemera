@@ -1,0 +1,20 @@
+version: '3'
+
+tasks:
+  build:
+    cmds:
+      - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -tags lambda.norpc -o bootstrap main.go
+
+  deploy:
+    deps:
+      - build
+    cmds:
+      - lambroll deploy --envfile .envrc
+
+  clean:
+    cmds:
+      - rm -f bootstrap
+
+  logs:
+    cmds:
+      - lambroll logs --follow
