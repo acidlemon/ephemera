@@ -1,9 +1,11 @@
 package main
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -114,6 +116,40 @@ func fetchConfigRecords() ([]*HostRecord, AuthorityRecords, error) {
 	return hosts, authorities, nil
 }
 
+type gzipResponseWriter struct {
+	io.Writer
+	http.ResponseWriter
+}
+
+func (w gzipResponseWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b)
+}
+
+func (w gzipResponseWriter) WriteHeader(code int) {
+	fmt.Printf("Writing header: %v\n", code)
+	w.Header().Del("Content-Length")
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func makeGzipHandler(fn http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			fn(w, r)
+			return
+		}
+		w.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(w)
+		defer func() {
+			err := gz.Close()
+			if err != nil {
+				fmt.Printf("Error closing gzip: %+v\n", err)
+			}
+		}()
+		gzr := gzipResponseWriter{Writer: gz, ResponseWriter: w}
+		fn(gzr, r)
+	}
+}
+
 func GeneralHandler(w http.ResponseWriter, req *http.Request) {
 	hosts, authorities, err := fetchConfigRecords()
 	if err != nil {
@@ -180,7 +216,22 @@ func GeneralHandler(w http.ResponseWriter, req *http.Request) {
 
 			destUrl, _ := url.Parse("http://" + host.Target)
 			rp := httputil.NewSingleHostReverseProxy(destUrl)
-			rp.ServeHTTP(w, req)
+
+			// enable gzip
+			if !strings.Contains(req.Header.Get("Accept-Encoding"), "gzip") {
+				rp.ServeHTTP(w, req)
+				return
+			}
+			w.Header().Set("Content-Encoding", "gzip")
+			gz := gzip.NewWriter(w)
+			defer func() {
+				err := gz.Close()
+				if err != nil {
+					fmt.Printf("Error closing gzip: %+v\n", err)
+				}
+			}()
+			gzr := gzipResponseWriter{Writer: gz, ResponseWriter: w}
+			rp.ServeHTTP(gzr, req)
 			return
 		}
 	}
