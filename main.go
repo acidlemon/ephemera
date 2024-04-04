@@ -181,6 +181,10 @@ func GeneralHandler(w http.ResponseWriter, req *http.Request) {
 			destUrl, _ := url.Parse("http://" + host.Target)
 			rp := httputil.NewSingleHostReverseProxy(destUrl)
 			rp.ServeHTTP(w, req)
+
+			// buff := &bytes.Buffer{}
+			// rp.ServeHTTP(&responseDumper{w, io.MultiWriter(w, buff)}, req)
+			// log.Println("Response: ", buff.String())
 			return
 		}
 	}
