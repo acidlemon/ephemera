@@ -1,9 +1,13 @@
 version: '3'
 
 tasks:
+  run:
+    cmds:
+      - reflex -r '\.go$' -s go run $(ls *.go) $*
+
   build:
     cmds:
-      - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -tags lambda.norpc -o bootstrap main.go
+      - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -tags lambda.norpc -o bootstrap $(ls *.go)
 
   deploy:
     deps:
