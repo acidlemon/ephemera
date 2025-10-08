@@ -11,7 +11,7 @@ require (
 	github.com/gorilla/securecookie v1.1.2
 	github.com/gorilla/sessions v1.2.2
 	github.com/pkg/errors v0.9.1
-	golang.org/x/oauth2 v0.16.0
+	golang.org/x/oauth2 v0.27.0
 )
 
 require (
@@ -32,9 +32,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.26.7 // indirect
 	github.com/aws/smithy-go v1.19.0 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.4 // indirect
-	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/pires/go-proxyproto v0.7.0 // indirect
 	golang.org/x/crypto v0.35.0 // indirect
-	google.golang.org/appengine v1.6.8 // indirect
-	google.golang.org/protobuf v1.33.0 // indirect
 )
