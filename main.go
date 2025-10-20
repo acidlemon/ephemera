@@ -210,5 +210,9 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", GeneralHandler)
-	ridge.Run(":5003", "/", mux)
+
+	r := ridge.New(":5003", "/", mux)
+	r.StramingResponse = true
+	r.Run()
+	// ridge.Run(":5003", "/", mux)
 }
