@@ -211,8 +211,12 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", GeneralHandler)
 
-	r := ridge.New(":5003", "/", mux)
-	r.StramingResponse = true
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "5003"
+	}
+
+	r := ridge.New(":"+port, "/", mux)
+	r.StreamingResponse = true
 	r.Run()
-	// ridge.Run(":5003", "/", mux)
 }
