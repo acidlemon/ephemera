@@ -1,6 +1,6 @@
 module github.com/acidlemon/ephemera
 
-go 1.23.0
+go 1.24.0
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.24.1
@@ -33,5 +33,5 @@ require (
 	github.com/aws/smithy-go v1.19.0 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.4 // indirect
 	github.com/pires/go-proxyproto v0.8.0 // indirect
-	golang.org/x/crypto v0.35.0 // indirect
+	golang.org/x/crypto v0.45.0 // indirect
 )
