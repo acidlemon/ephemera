@@ -42,6 +42,7 @@ var (
 	authSubdomain  string
 	clientID       string
 	clientSecret   string
+	notFoundPage   string
 )
 
 func MustEnv(key string) string {
@@ -64,6 +65,18 @@ func initialize() {
 
 	storekey := MustEnv("EPHEMERA_SESSION_KEY")
 	store = auth.NewCookieStore(storekey)
+
+	notFoundPage = `<!DOCTYPE html>
+<html>
+<head>
+	<title>404 Not Found</title>
+</head>
+<body>
+	<h1>Not Found</h1>
+	<p>The requested URL was not found on this server.</p>
+</body>
+</html>
+`
 }
 
 func fetchConfigRecords() ([]*HostRecord, AuthorityRecords, error) {
@@ -123,8 +136,18 @@ func GeneralHandler(w http.ResponseWriter, req *http.Request) {
 	}
 	now := time.Now()
 
+	reqHost := req.Header.Get("X-Forwarded-Host")
+	if reqHost == "" {
+		reqHost = req.Host
+	}
+	if !strings.HasSuffix(reqHost, hostSuffix) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(notFoundPage))
+		return
+	}
+
 	// check auth subdomain
-	subdomain := strings.Split(req.Header.Get("X-Forwarded-Host"), ".")[0]
+	subdomain := strings.Split(reqHost, ".")[0]
 	if subdomain == authSubdomain {
 		authServer, err := auth.NewServer(&auth.ServerOptions{
 			CookieStore:   store,
@@ -146,61 +169,46 @@ func GeneralHandler(w http.ResponseWriter, req *http.Request) {
 	for _, host := range hosts {
 		if host.Subdomain == subdomain && host.ExpireAt.After(now) {
 			// need auth?
-			if host.NeedAuth {
-				loginSession := auth.ExtractSession(req, store)
-				if loginSession.Email == "" {
-					// not logged in
-					session, err := store.New(req, "ephemera_gate")
-					if err != nil {
-						log.Println("failed to create gate session:", err.Error())
-						http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-						return
-					}
-					session.Options.Domain = hostSuffix
-					session.Options.SameSite = http.SameSiteNoneMode
-					session.Values["subdomain"] = subdomain
-					session.Values["path"] = req.URL.Path
-					session.Save(req, w)
-					http.Redirect(w, req, fmt.Sprintf("https://%s.%s/auth/sign_in", authSubdomain, hostSuffix), http.StatusFound)
+			loginSession := auth.ExtractSession(req, store)
+			if loginSession.Email == "" {
+				// not logged in
+				session, err := store.New(req, "ephemera_gate")
+				if err != nil {
+					log.Println("failed to create gate session:", err.Error())
+					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 					return
-				} else {
-					if subdomains, ok := authorities[loginSession.Email]; ok {
-						if !slices.Contains(subdomains, subdomain) && !slices.Contains(subdomains, "*") {
-							// unauthorized
-							http.Error(w, "Unauthorized", http.StatusUnauthorized)
-							return
-						}
-					} else {
+				}
+				session.Options.Domain = hostSuffix
+				session.Options.SameSite = http.SameSiteNoneMode
+				session.Values["subdomain"] = subdomain
+				session.Values["path"] = req.URL.Path
+				session.Save(req, w)
+				http.Redirect(w, req, fmt.Sprintf("https://%s.%s/auth/sign_in", authSubdomain, hostSuffix), http.StatusFound)
+				return
+			}
+			if host.NeedAuth {
+				if subdomains, ok := authorities[loginSession.Email]; ok {
+					if !slices.Contains(subdomains, subdomain) && !slices.Contains(subdomains, "*") {
 						// unauthorized
 						http.Error(w, "Unauthorized", http.StatusUnauthorized)
 						return
 					}
+				} else {
+					// unauthorized
+					http.Error(w, "Unauthorized", http.StatusUnauthorized)
+					return
 				}
 			}
 
 			destUrl, _ := url.Parse("http://" + host.Target)
 			rp := httputil.NewSingleHostReverseProxy(destUrl)
 			rp.ServeHTTP(w, req)
-
-			// buff := &bytes.Buffer{}
-			// rp.ServeHTTP(&responseDumper{w, io.MultiWriter(w, buff)}, req)
-			// log.Println("Response: ", buff.String())
 			return
 		}
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte(`<!DOCTYPE html>
-<html>
-<head>
-	<title>404 Not Found</title>
-</head>
-<body>
-	<h1>Not Found</h1>
-	<p>The requested URL was not found on this server.</p>
-</body>
-</html>
-`))
+	w.Write([]byte(notFoundPage))
 }
 
 func main() {
