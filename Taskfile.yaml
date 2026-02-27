@@ -9,6 +9,17 @@ tasks:
     cmds:
       - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -tags lambda.norpc -o bootstrap $(ls *.go)
 
+  build-image:
+    cmds:
+      - docker build -t ephemera -f docker/Dockerfile .
+
+  push-image:
+    deps:
+      - build-image
+    cmds:
+      - docker tag ephemera {{ .AWS_ACCOUNT_ID }}.dkr.ecr.{{ .AWS_REGION }}.amazonaws.com/ephemera:current
+      - docker push {{ .AWS_ACCOUNT_ID }}.dkr.ecr.{{ .AWS_REGION }}.amazonaws.com/ephemera:current
+
   deploy:
     deps:
       - build
