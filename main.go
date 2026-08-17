@@ -9,8 +9,10 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/acidlemon/ephemera/auth"
@@ -23,10 +25,11 @@ import (
 )
 
 type HostRecord struct {
-	Subdomain string    `json:"subdomain"`
-	Target    string    `json:"target"`
-	ExpireAt  time.Time `json:"expire_at"`
-	NeedAuth  bool      `json:"need_auth"`
+	Subdomain    string    `json:"subdomain"`
+	Target       string    `json:"target"`
+	ExpireAt     time.Time `json:"expire_at"`
+	NeedAuth     bool      `json:"need_auth"`
+	ExcludePaths []string  `json:"exclude_paths"`
 }
 
 type AuthorityRecords map[string][]string
@@ -127,6 +130,63 @@ func fetchConfigRecords() ([]*HostRecord, AuthorityRecords, error) {
 	return hosts, authorities, nil
 }
 
+func IsExcludedPath(excludePaths []string, path string) bool {
+	for _, p := range excludePaths {
+		if matchWildcard(p, path) {
+			return true
+		}
+	}
+	return false
+}
+
+// wildcardCache caches compiled regexes keyed by pattern. A nil value means
+// the pattern contains no wildcard and should be compared exactly.
+var wildcardCache sync.Map
+
+// matchWildcard reports whether path matches the pattern.
+// "*" matches any sequence of characters except "/" (a single path segment),
+// while "**" matches any sequence of characters including "/" (multiple levels).
+// e.g. "/" matches only "/", "/powawa/*/create" matches "/powawa/foo/create"
+// but not "/powawa/a/b/create", and "/powawa/**/create" matches both.
+func matchWildcard(pattern, path string) bool {
+	re := compileWildcard(pattern)
+	if re == nil {
+		// no wildcard: exact match
+		return pattern == path
+	}
+	return re.MatchString(path)
+}
+
+func compileWildcard(pattern string) *regexp.Regexp {
+	if v, ok := wildcardCache.Load(pattern); ok {
+		re, _ := v.(*regexp.Regexp)
+		return re
+	}
+
+	var re *regexp.Regexp
+	if strings.Contains(pattern, "*") {
+		var b strings.Builder
+		b.WriteString("^")
+		for i := 0; i < len(pattern); i++ {
+			if pattern[i] == '*' {
+				if i+1 < len(pattern) && pattern[i+1] == '*' {
+					b.WriteString(".*")
+					i++
+				} else {
+					b.WriteString("[^/]*")
+				}
+				continue
+			}
+			b.WriteString(regexp.QuoteMeta(pattern[i : i+1]))
+		}
+		b.WriteString("$")
+		re, _ = regexp.Compile(b.String())
+	}
+
+	wildcardCache.Store(pattern, re)
+	return re
+}
+
 func GeneralHandler(w http.ResponseWriter, req *http.Request) {
 	hosts, authorities, err := fetchConfigRecords()
 	if err != nil {
@@ -170,33 +230,35 @@ func GeneralHandler(w http.ResponseWriter, req *http.Request) {
 		if host.Subdomain == subdomain && host.ExpireAt.After(now) {
 			// need auth?
 			loginSession := auth.ExtractSession(req, store)
-			if loginSession.Email == "" {
-				// not logged in
-				session, err := store.New(req, "ephemera_gate")
-				if err != nil {
-					log.Println("failed to create gate session:", err.Error())
-					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			if !IsExcludedPath(host.ExcludePaths, req.URL.Path) {
+				if loginSession.Email == "" {
+					// not logged in
+					session, err := store.New(req, "ephemera_gate")
+					if err != nil {
+						log.Println("failed to create gate session:", err.Error())
+						http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+						return
+					}
+					session.Options.Domain = hostSuffix
+					session.Options.SameSite = http.SameSiteNoneMode
+					session.Values["subdomain"] = subdomain
+					session.Values["path"] = req.URL.Path
+					session.Save(req, w)
+					http.Redirect(w, req, fmt.Sprintf("https://%s.%s/auth/sign_in", authSubdomain, hostSuffix), http.StatusFound)
 					return
 				}
-				session.Options.Domain = hostSuffix
-				session.Options.SameSite = http.SameSiteNoneMode
-				session.Values["subdomain"] = subdomain
-				session.Values["path"] = req.URL.Path
-				session.Save(req, w)
-				http.Redirect(w, req, fmt.Sprintf("https://%s.%s/auth/sign_in", authSubdomain, hostSuffix), http.StatusFound)
-				return
-			}
-			if host.NeedAuth {
-				if subdomains, ok := authorities[loginSession.Email]; ok {
-					if !slices.Contains(subdomains, subdomain) && !slices.Contains(subdomains, "*") {
+				if host.NeedAuth {
+					if subdomains, ok := authorities[loginSession.Email]; ok {
+						if !slices.Contains(subdomains, subdomain) && !slices.Contains(subdomains, "*") {
+							// unauthorized
+							http.Error(w, "Unauthorized", http.StatusUnauthorized)
+							return
+						}
+					} else {
 						// unauthorized
 						http.Error(w, "Unauthorized", http.StatusUnauthorized)
 						return
 					}
-				} else {
-					// unauthorized
-					http.Error(w, "Unauthorized", http.StatusUnauthorized)
-					return
 				}
 			}
 
