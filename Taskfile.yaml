@@ -24,7 +24,14 @@ tasks:
     deps:
       - build
     cmds:
-      - lambroll deploy --envfile .envrc
+      - lambroll deploy --envfile .env
+
+  deploy-ecs:
+    deps:
+      - push-image
+    cmds:
+      - ecs-deploy -c ephemera-cluster -n ephemera-service -i {{ .AWS_ACCOUNT_ID }}.dkr.ecr.{{ .AWS_REGION }}.amazonaws.com/ephemera:current
+
 
   clean:
     cmds:
