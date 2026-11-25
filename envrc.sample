@@ -10,7 +10,7 @@ export EPHEMERA_CLIENT_ID=""
 export EPHEMERA_CLIENT_SECRET=""
 
 # 承認方式のログイン（任意）。true で有効。
-# 要求を EPHEMERA_S3_BUCKET_NAME の approvals/ に置くので、Lambda ロールに approvals/* への s3:PutObject が要る。
+# 要求を EPHEMERA_S3_BUCKET_NAME の approvals/ に置くので、Lambda ロールに approvals/* への s3:PutObject と s3:GetObject が要る。
 # approvals/ を1日で消すライフサイクルルールも設定すること
 export EPHEMERA_ENABLE_APPROVAL="false"
 
