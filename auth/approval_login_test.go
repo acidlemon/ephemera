@@ -343,3 +343,26 @@ func findCookie(w *httptest.ResponseRecorder, name string) *http.Cookie {
 	}
 	return nil
 }
+
+func TestRequesterIP(t *testing.T) {
+	tests := []struct {
+		name    string
+		headers map[string]string
+		want    string
+	}{
+		{"cloudfront viewer address", map[string]string{"CloudFront-Viewer-Address": "203.0.113.5:443", "X-Forwarded-For": "10.0.0.1, 198.51.100.7"}, "203.0.113.5"},
+		{"cloudfront ipv6", map[string]string{"CloudFront-Viewer-Address": "2001:db8::1:443"}, "2001:db8::1"},
+		{"spoofed first xff entry is ignored", map[string]string{"X-Forwarded-For": "10.0.0.1, 198.51.100.7"}, "198.51.100.7"},
+		{"remote addr", nil, "192.0.2.1:1234"},
+	}
+	for _, tt := range tests {
+		req := httptest.NewRequest("GET", "https://auth.example.com/", nil)
+		req.RemoteAddr = "192.0.2.1:1234"
+		for k, v := range tt.headers {
+			req.Header.Set(k, v)
+		}
+		if got := requesterIP(req); got != tt.want {
+			t.Errorf("%s: requesterIP() = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}

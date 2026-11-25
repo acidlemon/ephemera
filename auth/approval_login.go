@@ -68,9 +68,11 @@ func init() {
     <tr><th>Destination</th><td>{{ .Destination }}</td></tr>
     <tr><th>Requested at</th><td>{{ .CreatedAt }}</td></tr>
     <tr><th>Expires at</th><td>{{ .ExpiresAt }}</td></tr>
-    <tr><th>IP address</th><td>{{ .Request.RequesterIP }}</td></tr>
-    <tr><th>Browser</th><td>{{ .Request.RequesterUA }}</td></tr>
+    <tr><th>IP address *</th><td>{{ .Request.RequesterIP }}</td></tr>
+    <tr><th>Browser *</th><td>{{ .Request.RequesterUA }}</td></tr>
   </table>
+  <p><small>* For reference only. These values can be faked by the requester.
+     Decide based on whether the person sent you this code directly.</small></p>
   <form method="post" action="/auth/approval/decide">
     <input type="hidden" name="code" value="{{ .Request.Code }}" />
     <p>
@@ -126,9 +128,21 @@ func hashApprovalSecret(secret string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// requesterIP は承認者に参考として見せる申請者の IP アドレスを返す。
+// X-Forwarded-For の先頭はクライアントが自由に書けるので使わない。
+// CloudFront が付ける CloudFront-Viewer-Address（"IP:ポート"）があればそれを、
+// なければ X-Forwarded-For の末尾（手前のプロキシが付け足した値）を使う。
+// どちらも直接アクセスされれば偽れるので、確かな値ではない（画面にもそう書く）。
 func requesterIP(req *http.Request) string {
+	if v := req.Header.Get("CloudFront-Viewer-Address"); v != "" {
+		if i := strings.LastIndex(v, ":"); i > 0 {
+			return strings.Trim(v[:i], "[]")
+		}
+		return v
+	}
 	if xff := req.Header.Get("X-Forwarded-For"); xff != "" {
-		return strings.TrimSpace(strings.Split(xff, ",")[0])
+		parts := strings.Split(xff, ",")
+		return strings.TrimSpace(parts[len(parts)-1])
 	}
 	return req.RemoteAddr
 }
