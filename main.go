@@ -309,8 +309,8 @@ func GeneralHandler(w http.ResponseWriter, req *http.Request) {
 
 	hosts, authorities, err := fetchConfigRecords()
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"message":"failed to fetch config:` + err.Error() + `"}`))
+		// 詳細（バケット名・ロール ARN など）はログにだけ出す
+		auth.WriteHttpError(w, auth.NewHttpError(http.StatusServiceUnavailable, "Failed to load configuration", err))
 		return
 	}
 	now := time.Now()
@@ -336,8 +336,7 @@ func GeneralHandler(w http.ResponseWriter, req *http.Request) {
 			AuthSubdomain: authSubdomain,
 		})
 		if err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"message":"failed to create auth server:` + err.Error() + `"}`))
+			auth.WriteHttpError(w, auth.NewHttpError(http.StatusInternalServerError, "Failed to initialize authentication", err))
 			return
 		}
 		log.Println("authServer.ServeHTTP")

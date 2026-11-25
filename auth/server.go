@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"html/template"
 	"io"
@@ -147,7 +148,7 @@ func (s *Server) StartAuth(w http.ResponseWriter, req *http.Request) {
 
 	err := session.Save(req, w)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		WriteHttpError(w, NewHttpError(http.StatusInternalServerError, "Write Auth Session Error", err))
 		return
 	}
 	http.Redirect(w, req, url, http.StatusFound)
@@ -379,35 +380,47 @@ func (e *httpError) Detail() error {
 	return e.detail
 }
 
+var errorPage = template.Must(template.New("errorHTML").Parse(errorHTML))
+
+// NewErrorID はエラーをログと突き合わせるための短い ID を返す。
+func NewErrorID() string {
+	return hex.EncodeToString(securecookie.GenerateRandomKey(6))
+}
+
+// WriteHttpError はエラーページを返す。
+// 内部の詳細（HttpError の Detail や、HttpError 以外のエラーの文字列）は画面に出さずログにだけ出し、
+// 画面には問い合わせ用のエラー ID を表示する。
 func WriteHttpError(w http.ResponseWriter, err error) {
 	statusCode := http.StatusInternalServerError
-	httpErr, ok := err.(HttpError)
-	message := err.Error()
-	detail := ""
-	if ok {
+	message := http.StatusText(statusCode)
+	var detail error = err
+	if httpErr, ok := err.(HttpError); ok {
 		statusCode = httpErr.StatusCode()
-		if httpErr.Detail() != nil {
-			detail = httpErr.Detail().Error()
-		}
+		message = httpErr.Error()
+		detail = httpErr.Detail()
 	}
 
-	tmpl := template.Must(template.New("errorHTML").Parse(errorHTML))
+	errorID := NewErrorID()
+	if detail != nil {
+		log.Printf("error id=%s status=%d message=%q detail=%q", errorID, statusCode, message, detail.Error())
+	} else {
+		log.Printf("error id=%s status=%d message=%q", errorID, statusCode, message)
+	}
 
-	switch statusCode {
-	case http.StatusUnauthorized:
+	if statusCode == http.StatusUnauthorized {
 		// hide failure reason
 		w.WriteHeader(http.StatusUnauthorized)
-		break
-	default:
-		w.WriteHeader(statusCode)
-		tmpl.Execute(w, map[string]string{
-			"StatusCode":    fmt.Sprintf("%d", statusCode),
-			"StatusMessage": http.StatusText(statusCode),
-			"ErrorMessage":  message,
-			"ErrorDetail":   detail,
-		})
+		return
 	}
-	return
+
+	w.Header().Set("Content-Type", "text/html; charset=UTF-8")
+	w.WriteHeader(statusCode)
+	errorPage.Execute(w, map[string]string{
+		"StatusCode":    fmt.Sprintf("%d", statusCode),
+		"StatusMessage": http.StatusText(statusCode),
+		"ErrorMessage":  message,
+		"ErrorID":       errorID,
+	})
 }
 
 const errorHTML = `<!doctype html>
@@ -427,11 +440,9 @@ const errorHTML = `<!doctype html>
     <dl>
       <dt>Reason</dt><dd>{{ .ErrorMessage }}</dd>
     </dl>
-    {{ if .ErrorDetail }}
     <dl>
-      <dt>Detail</dt><dd>{{ .ErrorDetail }}</dd>
+      <dt>Error ID</dt><dd><code>{{ .ErrorID }}</code></dd>
     </dl>
-    {{ end }}
   </blockquote>
   <p><a href="/">back</a></p>
 </main>

@@ -1,8 +1,10 @@
 package auth
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -47,6 +49,24 @@ func TestCallbackAndVerifyWithoutSessionDoNotPanic(t *testing.T) {
 		tc.h(w, tc.req)
 		if w.Code != http.StatusForbidden {
 			t.Errorf("%s: status = %d, want 403", tc.name, w.Code)
+		}
+	}
+}
+
+func TestWriteHttpErrorHidesDetail(t *testing.T) {
+	secret := "arn:aws:sts::123456789012:assumed-role/ephemera-role"
+	for _, err := range []error{
+		NewHttpError(http.StatusServiceUnavailable, "Failed to load configuration", errors.New(secret)),
+		errors.New(secret),
+	} {
+		w := httptest.NewRecorder()
+		WriteHttpError(w, err)
+		body := w.Body.String()
+		if strings.Contains(body, secret) {
+			t.Errorf("error page leaks detail: %s", body)
+		}
+		if !strings.Contains(body, "Error ID") {
+			t.Errorf("error page has no error id: %s", body)
 		}
 	}
 }
