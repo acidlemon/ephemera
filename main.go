@@ -187,6 +187,59 @@ func compileWildcard(pattern string) *regexp.Regexp {
 	return re
 }
 
+// ephemera が発行するクッキーの接頭辞。バックエンドには渡さない。
+const ephemeraCookiePrefix = "ephemera_"
+
+// バックエンドにログイン中のユーザーを伝えるヘッダー
+const (
+	headerEphemeraEmail = "X-Ephemera-Email"
+	headerEphemeraSub   = "X-Ephemera-Sub"
+)
+
+// prepareUpstreamRequest はバックエンドに転送する前のリクエストを整える。
+//   - ephemera_* クッキーを取り除く（バックエンドにログインクッキーを渡さない）
+//   - クライアントが送ってきた X-Ephemera-* ヘッダーを捨てる（X_Ephemera_* などの表記揺れも含む。なりすまし防止）
+//   - ログイン中なら X-Ephemera-Email / X-Ephemera-Sub を付ける
+func prepareUpstreamRequest(req *http.Request, login *auth.LoginSession) {
+	stripEphemeraCookies(req.Header)
+
+	// "_" を "-" と同一視するバックエンド（Rack/WSGI/CGI など）もあるため、
+	// 大小文字と "_" / "-" の違いを無視して比較する
+	for name := range req.Header {
+		n := strings.ToLower(strings.ReplaceAll(name, "_", "-"))
+		if strings.HasPrefix(n, "x-ephemera-") {
+			delete(req.Header, name)
+		}
+	}
+
+	if login != nil && login.Email != "" {
+		req.Header.Set(headerEphemeraEmail, login.Email)
+		req.Header.Set(headerEphemeraSub, login.Sub)
+	}
+}
+
+func stripEphemeraCookies(h http.Header) {
+	r := &http.Request{Header: http.Header{"Cookie": h.Values("Cookie")}}
+	var kept []string
+	for _, c := range r.Cookies() {
+		if strings.HasPrefix(c.Name, ephemeraCookiePrefix) {
+			continue
+		}
+		kept = append(kept, c.Name+"="+c.Value)
+	}
+	h.Del("Cookie")
+	if len(kept) > 0 {
+		h.Set("Cookie", strings.Join(kept, "; "))
+	}
+}
+
+func emailOrAnonymous(login *auth.LoginSession) string {
+	if login == nil || login.Email == "" {
+		return "-"
+	}
+	return login.Email
+}
+
 func GeneralHandler(w http.ResponseWriter, req *http.Request) {
 	hosts, authorities, err := fetchConfigRecords()
 	if err != nil {
@@ -251,16 +304,22 @@ func GeneralHandler(w http.ResponseWriter, req *http.Request) {
 					if subdomains, ok := authorities[loginSession.Email]; ok {
 						if !slices.Contains(subdomains, subdomain) && !slices.Contains(subdomains, "*") {
 							// unauthorized
+							log.Printf("denied subdomain=%s method=%s path=%q email=%s reason=not_allowed", subdomain, req.Method, req.URL.Path, loginSession.Email)
 							http.Error(w, "Unauthorized", http.StatusUnauthorized)
 							return
 						}
 					} else {
 						// unauthorized
+						log.Printf("denied subdomain=%s method=%s path=%q email=%s reason=no_authority", subdomain, req.Method, req.URL.Path, loginSession.Email)
 						http.Error(w, "Unauthorized", http.StatusUnauthorized)
 						return
 					}
 				}
 			}
+
+			prepareUpstreamRequest(req, loginSession)
+			log.Printf("access subdomain=%s method=%s path=%q email=%s remote=%q",
+				subdomain, req.Method, req.URL.Path, emailOrAnonymous(loginSession), req.Header.Get("X-Forwarded-For"))
 
 			destUrl, _ := url.Parse("http://" + host.Target)
 			rp := httputil.NewSingleHostReverseProxy(destUrl)
