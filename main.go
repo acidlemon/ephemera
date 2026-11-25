@@ -319,6 +319,16 @@ func emailOrAnonymous(login *auth.LoginSession) string {
 	return login.Email
 }
 
+// loginFor は subdomain へのリクエストで使えるログインを返す。
+// 別のサブドメインに絞られたセッション（承認方式）は、ここではログインしていない扱いにする（D-017）。
+func loginFor(req *http.Request, subdomain string) *auth.LoginSession {
+	l := auth.ExtractSession(req, store)
+	if !l.ValidFor(subdomain) {
+		return &auth.LoginSession{}
+	}
+	return l
+}
+
 func GeneralHandler(w http.ResponseWriter, req *http.Request) {
 	if originSecret != "" &&
 		subtle.ConstantTimeCompare([]byte(req.Header.Get(headerOriginSecret)), []byte(originSecret)) != 1 {
@@ -367,11 +377,7 @@ func GeneralHandler(w http.ResponseWriter, req *http.Request) {
 	for _, host := range hosts {
 		if host.Subdomain == subdomain && host.ExpireAt.After(now) {
 			// need auth?
-			loginSession := auth.ExtractSession(req, store)
-			if !loginSession.ValidFor(subdomain) {
-				// 別のサブドメインに絞られたセッション（承認方式）は、ここではログインしていない扱いにする（D-017）
-				loginSession = &auth.LoginSession{}
-			}
+			loginSession := loginFor(req, subdomain)
 			if !IsExcludedPath(host.ExcludePaths, req.URL.Path) {
 				if loginSession.Email == "" {
 					// not logged in

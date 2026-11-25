@@ -2,7 +2,9 @@ package main
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/acidlemon/ephemera/auth"
 )
@@ -57,5 +59,49 @@ func TestPrepareUpstreamRequestAnonymous(t *testing.T) {
 	}
 	if got := req.Header.Get("X-Ephemera-Email"); got != "" {
 		t.Errorf("X-Ephemera-Email should be removed, got %q", got)
+	}
+}
+
+func TestLoginForScopedSession(t *testing.T) {
+	store = auth.NewCookieStore("0123456789abcdef0123456789abcdef")
+	issue := func(values map[string]any) *http.Cookie {
+		req, _ := http.NewRequest("GET", "https://auth.example.com/", nil)
+		w := httptest.NewRecorder()
+		sess, _ := store.New(req, "ephemera_session")
+		for k, v := range values {
+			sess.Values[k] = v
+		}
+		if err := sess.Save(req, w); err != nil {
+			t.Fatal(err)
+		}
+		return w.Result().Cookies()[0]
+	}
+	valid := time.Now().Add(time.Hour).Unix()
+	approval := issue(map[string]any{"email": "lemon@example.com", "sub": "approval:ABCD-EFGH", "valid_until": valid,
+		"auth_method": "approval", "allowed_subdomain": "app"})
+	google := issue(map[string]any{"email": "lemon@example.com", "sub": "123", "valid_until": valid, "auth_method": "google"})
+
+	tests := []struct {
+		name      string
+		cookie    *http.Cookie
+		subdomain string
+		wantEmail string
+	}{
+		{"approval session on its subdomain", approval, "app", "lemon@example.com"},
+		{"approval session on another subdomain", approval, "other", ""},
+		{"google session anywhere", google, "other", "lemon@example.com"},
+	}
+	for _, tt := range tests {
+		req, _ := http.NewRequest("GET", "https://"+tt.subdomain+".example.com/", nil)
+		req.AddCookie(tt.cookie)
+		login := loginFor(req, tt.subdomain)
+		if login.Email != tt.wantEmail {
+			t.Errorf("%s: email = %q, want %q", tt.name, login.Email, tt.wantEmail)
+		}
+		// ログインしていない扱いなら、バックエンドに身元のヘッダーを渡さない
+		prepareUpstreamRequest(req, login)
+		if got := req.Header.Get("X-Ephemera-Email"); got != tt.wantEmail {
+			t.Errorf("%s: X-Ephemera-Email = %q", tt.name, got)
+		}
 	}
 }
