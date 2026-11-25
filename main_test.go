@@ -70,6 +70,12 @@ func TestIsExcludedPathRejectsNonCanonical(t *testing.T) {
 		"/public/..\\admin":    false,
 		"/public/%2e%2e/admin": false, // 二重エンコードがデコードされた形
 		"/public/...":          false,
+		"/public/.;/admin":     false,
+		"/public/x;jsessionid": false,
+		"/public/a?b":          false, // %3f がデコードされた形
+		"/public/a#b":          false, // %23 がデコードされた形
+		"/public/a\x00b":       false,
+		"/public/a\nb":         false,
 		"/admin":               false,
 	}
 	for p, want := range cases {

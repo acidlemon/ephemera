@@ -144,8 +144,8 @@ func fetchConfigRecords() ([]*HostRecord, AuthorityRecords, error) {
 
 // IsExcludedPath は認証なしで通すパスかを判定する。
 // path はデコード済みのパス（req.URL.Path）。バックエンドにはエンコードされたままのパスが届くため、
-// デコード後に正規化されていないパス（"..", ".", "//", "..;" など）や、
-// バックエンドが別の解釈をしうる文字（"\\", 二重エンコードの "%"）を含むパスは、除外の対象にしない。
+// デコード後に正規化されていないパス（"..", ".", "//" など）や、
+// バックエンドが別の解釈をしうる文字（"\\", "%", ";", "?", "#", 制御文字）を含むパスは、除外の対象にしない。
 func IsExcludedPath(excludePaths []string, path string) bool {
 	if !isCanonicalPath(path) {
 		return false
@@ -160,8 +160,19 @@ func IsExcludedPath(excludePaths []string, path string) bool {
 
 // isCanonicalPath は path がそれ以上正規化の余地のないパスかを返す。
 func isCanonicalPath(p string) bool {
-	if !strings.HasPrefix(p, "/") || strings.ContainsAny(p, "\\%") {
+	if !strings.HasPrefix(p, "/") {
 		return false
+	}
+	// バックエンドが別の意味に解釈しうる文字を含むものは除外しない:
+	// "\\"（区切りとみなす実装がある）、"%"（二重エンコード）、";"（パスパラメータ）、
+	// "?" / "#"（デコード後に現れた場合）、制御文字
+	if strings.ContainsAny(p, "\\%;?#") {
+		return false
+	}
+	for _, r := range p {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
 	}
 	trimmed := p
 	if len(p) > 1 {
