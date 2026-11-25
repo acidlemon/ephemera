@@ -14,7 +14,7 @@ tasks:
       - build
     cmds:
       # バイナリは build で amd64 向けにクロスコンパイル済み。イメージも amd64 に固定する
-      - docker build --platform linux/amd64 -t ephemera -f docker/Dockerfile .
+      - docker build --platform linux/amd64 --provenance=false -t ephemera -f docker/Dockerfile .
 
   push-image:
     deps:
