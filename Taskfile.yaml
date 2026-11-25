@@ -10,8 +10,11 @@ tasks:
       - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -tags lambda.norpc -o bootstrap $(ls *.go)
 
   build-image:
+    deps:
+      - build
     cmds:
-      - docker build -t ephemera -f docker/Dockerfile .
+      # バイナリは build で amd64 向けにクロスコンパイル済み。イメージも amd64 に固定する
+      - docker build --platform linux/amd64 -t ephemera -f docker/Dockerfile .
 
   push-image:
     deps:

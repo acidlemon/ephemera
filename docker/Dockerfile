@@ -1,51 +1,18 @@
-# Build stage
-FROM golang:1.25-alpine AS builder
-
-# Install build dependencies
-RUN apk add --no-cache git ca-certificates tzdata
-
-WORKDIR /build
-
-# Download dependencies (for better layer caching)
-COPY go.mod go.sum ./
-RUN go mod download
-
-# Copy source code
-COPY . .
-
-# Build statically linked binary
-# CGO_ENABLED=0: Disable cgo for static linking
-# -ldflags="-s -w": Strip debug info and symbol table to reduce binary size
-# -trimpath: Remove file path information
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-s -w" \
-    -trimpath \
-    -o ephemera \
-    .
-
-# Runtime stage
-FROM alpine:3
-
-# Install runtime dependencies (CA certs for HTTPS, timezone data)
-RUN apk add --no-cache ca-certificates tzdata
-
-# Create non-root user
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser
+# ephemera の実行用イメージ（linux/amd64）
+#
+# バイナリはホストでクロスコンパイルしたもの（task build の bootstrap）をコピーするだけにしている。
+# RUN を持たないので、arm64 のホストでもエミュレーションなしで amd64 のイメージを作れる。
+#   task build-image   # = task build && docker build --platform linux/amd64 ...
+#
+# distroless/static の nonroot 版には CA 証明書・tzdata・非 root ユーザー（65532）が入っている。
+FROM gcr.io/distroless/static-debian12:nonroot
 
 WORKDIR /app
 
-# Copy binary from build stage
-COPY --from=builder /build/ephemera .
-
-# Switch to non-root user
-USER appuser
+COPY bootstrap /app/ephemera
 
 # Default port (can be overridden via environment variable)
 ENV PORT=5003
+EXPOSE 5003
 
-# Expose port
-EXPOSE ${PORT}
-
-# Run the application
 ENTRYPOINT ["/app/ephemera"]
