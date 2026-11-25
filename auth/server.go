@@ -255,9 +255,6 @@ func (s *Server) VerifyAuth(w http.ResponseWriter, req *http.Request) {
 	returnSubdomain, _ := session.Values["return_subdomain"].(string)
 	returnPath, _ := session.Values["return_path"].(string)
 	subdomain, path := sanitizeReturnTo(returnSubdomain, returnPath)
-	if subdomain == "" {
-		subdomain = s.authSubdomain
-	}
 
 	// delete authetication session
 	session.Options.MaxAge = -1
@@ -267,7 +264,21 @@ func (s *Server) VerifyAuth(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// set authorization session
+	s.completeLogin(w, req, token.Email, token.Sub, googleLoginValidity, subdomain, path)
+}
+
+// Google でログインしたときのログインの有効期間
+const googleLoginValidity = 7 * 24 * time.Hour
+
+// completeLogin はログインを確定する。ログインセッション（ephemera_session）を作り、
+// 戻り先 https://{subdomain}.{hostSuffix}{path} へリダイレクトする。
+// subdomain と path は sanitizeReturnTo を通した値を渡すこと（subdomain が空なら認証サブドメインに戻る）。
+// sub はログイン方法ごとに一意な識別子（Google なら sub クレーム、メールなら "email:アドレス"）。
+func (s *Server) completeLogin(w http.ResponseWriter, req *http.Request, email, sub string, validity time.Duration, subdomain, path string) {
+	if subdomain == "" {
+		subdomain = s.authSubdomain
+	}
+
 	commonSession, err := s.store.New(req, commonSessionName)
 	if err != nil {
 		WriteHttpError(w, NewHttpError(http.StatusInternalServerError, "Session Error", err))
@@ -276,11 +287,10 @@ func (s *Server) VerifyAuth(w http.ResponseWriter, req *http.Request) {
 	commonSession.Options.Domain = s.hostSuffix
 	commonSession.Options.MaxAge = 60 * 60 * 24 * 30
 	commonSession.Options.SameSite = http.SameSiteLaxMode
-	commonSession.Values["email"] = token.Email
-	commonSession.Values["sub"] = token.Sub
-	commonSession.Values["valid_until"] = time.Now().Add(7 * 24 * time.Hour).Unix()
-	err = commonSession.Save(req, w)
-	if err != nil {
+	commonSession.Values["email"] = email
+	commonSession.Values["sub"] = sub
+	commonSession.Values["valid_until"] = time.Now().Add(validity).Unix()
+	if err := commonSession.Save(req, w); err != nil {
 		WriteHttpError(w, NewHttpError(http.StatusInternalServerError, "Write Common Session Error", err))
 		return
 	}
