@@ -23,11 +23,12 @@ tasks:
       # バイナリは build で amd64 向けにクロスコンパイル済み。イメージも amd64 に固定する
       - docker build --platform linux/amd64 --provenance=false -t ephemera -f docker/Dockerfile .
 
+  # ECR の認証は docker の credHelpers（amazon-ecr-credential-helper の ecr-login）に任せる。
+  # ~/.docker/config.json の credHelpers に "<アカウント>.dkr.ecr.<リージョン>.amazonaws.com": "ecr-login" が要る
   push-image:
     deps:
       - build-image
     cmds:
-      - aws ecr get-login-password --region {{ .AWS_REGION }} | docker login --username AWS --password-stdin {{ .AWS_ACCOUNT_ID }}.dkr.ecr.{{ .AWS_REGION }}.amazonaws.com
       - docker tag ephemera {{ .ECR_REPO }}:{{ .GIT_SHA }}
       - docker tag ephemera {{ .ECR_REPO }}:current
       - docker push {{ .ECR_REPO }}:{{ .GIT_SHA }}
