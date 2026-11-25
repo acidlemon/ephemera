@@ -1,5 +1,12 @@
 version: '3'
 
+vars:
+  # イメージのタグに使うコミット。作業ツリーに未コミットの変更があっても、そのコミットの名前になる点に注意
+  GIT_SHA:
+    sh: git rev-parse --short HEAD
+  ECR_REPO: '{{ .AWS_ACCOUNT_ID }}.dkr.ecr.{{ .AWS_REGION }}.amazonaws.com/ephemera'
+  ECSPRESSO: ecspresso --config deploy/ecs/ecspresso.yml
+
 tasks:
   run:
     cmds:
@@ -20,8 +27,11 @@ tasks:
     deps:
       - build-image
     cmds:
-      - docker tag ephemera {{ .AWS_ACCOUNT_ID }}.dkr.ecr.{{ .AWS_REGION }}.amazonaws.com/ephemera:current
-      - docker push {{ .AWS_ACCOUNT_ID }}.dkr.ecr.{{ .AWS_REGION }}.amazonaws.com/ephemera:current
+      - aws ecr get-login-password --region {{ .AWS_REGION }} | docker login --username AWS --password-stdin {{ .AWS_ACCOUNT_ID }}.dkr.ecr.{{ .AWS_REGION }}.amazonaws.com
+      - docker tag ephemera {{ .ECR_REPO }}:{{ .GIT_SHA }}
+      - docker tag ephemera {{ .ECR_REPO }}:current
+      - docker push {{ .ECR_REPO }}:{{ .GIT_SHA }}
+      - docker push {{ .ECR_REPO }}:current
 
   deploy:
     deps:
@@ -29,11 +39,23 @@ tasks:
     cmds:
       - lambroll deploy --envfile .env
 
+  # ECS（クラスター brightest / サービス ephemera）へ ecspresso でデプロイする。
+  # 必要な環境変数: AWS_ACCOUNT_ID, AWS_REGION, EPHEMERA_SSM_PREFIX（deploy/ecs/ecspresso.yml を参照）
   deploy-ecs:
     deps:
       - push-image
     cmds:
-      - ecs-deploy -c ephemera-cluster -n ephemera-service -i {{ .AWS_ACCOUNT_ID }}.dkr.ecr.{{ .AWS_REGION }}.amazonaws.com/ephemera:current
+      - IMAGE_TAG={{ .GIT_SHA }} {{ .ECSPRESSO }} deploy
+
+  # デプロイ前に、リポジトリの定義と ECS 上の今の定義の違いを見る
+  diff-ecs:
+    cmds:
+      - IMAGE_TAG={{ .GIT_SHA }} {{ .ECSPRESSO }} diff
+
+  # ロール・イメージ・SSM パラメータなど、定義が参照するものが使えるかを確かめる
+  verify-ecs:
+    cmds:
+      - IMAGE_TAG={{ .GIT_SHA }} {{ .ECSPRESSO }} verify
 
 
   clean:

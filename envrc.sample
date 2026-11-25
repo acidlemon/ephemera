@@ -8,3 +8,9 @@ export EPHEMERA_AUTH_SUBDOMAIN=""
 export EPHEMERA_SESSION_KEY=""
 export EPHEMERA_CLIENT_ID=""
 export EPHEMERA_CLIENT_SECRET=""
+
+# ECS へのデプロイ（task deploy-ecs / diff-ecs / verify-ecs）
+export AWS_ACCOUNT_ID=""
+export AWS_REGION="ap-northeast-1"
+# 秘密の値を置いている SSM パラメータストアのパス（末尾の / なし）
+export EPHEMERA_SSM_PREFIX=""
