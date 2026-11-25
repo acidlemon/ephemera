@@ -240,7 +240,7 @@ func GeneralHandler(w http.ResponseWriter, req *http.Request) {
 						return
 					}
 					session.Options.Domain = hostSuffix
-					session.Options.SameSite = http.SameSiteNoneMode
+					session.Options.SameSite = http.SameSiteLaxMode
 					session.Values["subdomain"] = subdomain
 					session.Values["path"] = req.URL.Path
 					session.Save(req, w)

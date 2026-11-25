@@ -275,7 +275,7 @@ func (s *Server) VerifyAuth(w http.ResponseWriter, req *http.Request) {
 	}
 	commonSession.Options.Domain = s.hostSuffix
 	commonSession.Options.MaxAge = 60 * 60 * 24 * 30
-	commonSession.Options.SameSite = http.SameSiteNoneMode
+	commonSession.Options.SameSite = http.SameSiteLaxMode
 	commonSession.Values["email"] = token.Email
 	commonSession.Values["sub"] = token.Sub
 	commonSession.Values["valid_until"] = time.Now().Add(7 * 24 * time.Hour).Unix()
