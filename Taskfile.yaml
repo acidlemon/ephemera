@@ -40,7 +40,7 @@ tasks:
     cmds:
       - lambroll deploy --envfile .env
 
-  # ECS（クラスター brightest / サービス ephemera）へ ecspresso でデプロイする。
+  # deploy/ecs/ecspresso.yml の ECS サービスへ ecspresso でデプロイする。
   # イメージの push はしない。先に push の権限がある環境で task push-image を実行しておくこと。
   # いまのコミットのハッシュのタグのイメージが ECR にあることを確かめてからデプロイする（読み取り権限で足りる）。
   # 必要な環境変数: AWS_ACCOUNT_ID, AWS_REGION, EPHEMERA_SSM_PREFIX（deploy/ecs/ecspresso.yml を参照）

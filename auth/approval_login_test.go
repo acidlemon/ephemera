@@ -11,9 +11,9 @@ import (
 )
 
 var approvalAuthorities = map[string][]string{
-	"lemon@example.com": {"app"},
-	"admin@example.com": {"*"},
-	"other@example.com": {"other"},
+	"approver@example.com": {"app"},
+	"admin@example.com":    {"*"},
+	"other@example.com":    {"other"},
 }
 
 type approvalEnv struct {
@@ -114,14 +114,14 @@ func TestApprovalFlow(t *testing.T) {
 	}
 
 	// 承認者がコードを入力すると中身が出る（小文字・ハイフンなしでもよい）
-	lemon := e.googleSession("lemon@example.com")
-	w = e.do("GET", "/auth/approval?code="+strings.ToLower(strings.ReplaceAll(code, "-", "")), nil, lemon)
+	approver := e.googleSession("approver@example.com")
+	w = e.do("GET", "/auth/approval?code="+strings.ToLower(strings.ReplaceAll(code, "-", "")), nil, approver)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "https://app.example.com/foo") ||
 		!strings.Contains(w.Body.String(), `value="approve"`) {
 		t.Fatalf("lookup: status = %d", w.Code)
 	}
 
-	if w := e.decide(lemon, code, "approve"); w.Code != http.StatusOK {
+	if w := e.decide(approver, code, "approve"); w.Code != http.StatusOK {
 		t.Fatalf("approve: status = %d", w.Code)
 	}
 	if got := e.status(code); got != ApprovalApproved {
@@ -137,7 +137,7 @@ func TestApprovalFlow(t *testing.T) {
 		t.Errorf("approval cookie is not deleted: %+v", c)
 	}
 	session := extract(e.s, findCookie(w, commonSessionName))
-	if session.Email != "lemon@example.com" || session.AuthMethod != AuthMethodApproval ||
+	if session.Email != "approver@example.com" || session.AuthMethod != AuthMethodApproval ||
 		session.AllowedSubdomain != "app" || session.Sub != "approval:"+code {
 		t.Errorf("session = %+v", session)
 	}
@@ -160,7 +160,7 @@ func TestApprovalFlow(t *testing.T) {
 func TestApprovalDeny(t *testing.T) {
 	e := newApprovalEnv(t)
 	requester, code := e.start("app", "/")
-	if w := e.decide(e.googleSession("lemon@example.com"), code, "deny"); w.Code != http.StatusOK {
+	if w := e.decide(e.googleSession("approver@example.com"), code, "deny"); w.Code != http.StatusOK {
 		t.Fatalf("deny: status = %d", w.Code)
 	}
 	w := e.do("GET", "/auth/approval/wait", nil, requester)
@@ -175,12 +175,12 @@ func TestApprovalWhoCanApprove(t *testing.T) {
 		approver *http.Cookie
 		wantCode int
 	}{
-		{"allowed for the subdomain", nil, http.StatusOK}, // lemon（下で設定）
+		{"allowed for the subdomain", nil, http.StatusOK}, // approver（下で設定）
 		{"wildcard", nil, http.StatusOK},                  // admin
 		{"other subdomain only", nil, http.StatusNotFound},
 		{"not in authorities", nil, http.StatusNotFound},
 	}
-	emails := []string{"lemon@example.com", "admin@example.com", "other@example.com", "nobody@example.com"}
+	emails := []string{"approver@example.com", "admin@example.com", "other@example.com", "nobody@example.com"}
 	for i, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := newApprovalEnv(t)
@@ -214,7 +214,7 @@ func TestApprovalPageRequiresGoogleLogin(t *testing.T) {
 	}
 
 	// 承認方式で入ったセッションでは承認できない（承認の連鎖を防ぐ）
-	approvalSession := issueSession(t, e.s, loginGrant{Email: "lemon@example.com", Sub: "approval:X", Method: AuthMethodApproval, Validity: time.Hour, AllowedSubdomain: "app"})
+	approvalSession := issueSession(t, e.s, loginGrant{Email: "approver@example.com", Sub: "approval:X", Method: AuthMethodApproval, Validity: time.Hour, AllowedSubdomain: "app"})
 	if w := e.do("GET", "/auth/approval?code="+code, nil, approvalSession); w.Code != http.StatusForbidden {
 		t.Errorf("approval session lookup: status = %d", w.Code)
 	}
@@ -232,7 +232,7 @@ func TestApprovalPageRequiresGoogleLogin(t *testing.T) {
 func TestApprovalWaitRequiresSecret(t *testing.T) {
 	e := newApprovalEnv(t)
 	requester, code := e.start("app", "/")
-	e.decide(e.googleSession("lemon@example.com"), code, "approve")
+	e.decide(e.googleSession("approver@example.com"), code, "approve")
 
 	forged := &http.Cookie{Name: approvalCookieName, Value: code + ".wrong-secret"}
 	if w := e.do("GET", "/auth/approval/wait", nil, forged); w.Code != http.StatusForbidden || findCookie(w, commonSessionName) != nil {
@@ -250,8 +250,8 @@ func TestApprovalWaitRequiresSecret(t *testing.T) {
 func TestApprovalApproverLostAccess(t *testing.T) {
 	e := newApprovalEnv(t)
 	requester, code := e.start("app", "/")
-	e.decide(e.googleSession("lemon@example.com"), code, "approve")
-	// 承認のあとで lemon が authorities.json から外された
+	e.decide(e.googleSession("approver@example.com"), code, "approve")
+	// 承認のあとで承認者が authorities.json から外された
 	e.s.authorities = map[string][]string{"admin@example.com": {"*"}}
 	w := e.do("GET", "/auth/approval/wait", nil, requester)
 	if w.Code != http.StatusForbidden || findCookie(w, commonSessionName) != nil {
@@ -267,8 +267,8 @@ func TestApprovalExpired(t *testing.T) {
 	if err := e.store.Update(context.Background(), r, etag); err != nil {
 		t.Fatal(err)
 	}
-	lemon := e.googleSession("lemon@example.com")
-	if w := e.decide(lemon, code, "approve"); w.Code != http.StatusNotFound {
+	approver := e.googleSession("approver@example.com")
+	if w := e.decide(approver, code, "approve"); w.Code != http.StatusNotFound {
 		t.Errorf("approve expired: status = %d", w.Code)
 	}
 	if w := e.do("GET", "/auth/approval/wait", nil, requester); w.Code != http.StatusForbidden {
@@ -299,7 +299,7 @@ func TestApprovalStartRejects(t *testing.T) {
 	req := httptest.NewRequest("POST", "https://auth.example.com/auth/approval/decide", strings.NewReader("action=approve&code="+code))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Sec-Fetch-Site", "cross-site")
-	req.AddCookie(e.googleSession("lemon@example.com"))
+	req.AddCookie(e.googleSession("approver@example.com"))
 	w := httptest.NewRecorder()
 	e.h.ServeHTTP(w, req)
 	if w.Code != http.StatusForbidden || e.status(code) != ApprovalPending {

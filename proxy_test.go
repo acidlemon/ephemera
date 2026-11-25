@@ -77,9 +77,9 @@ func TestLoginForScopedSession(t *testing.T) {
 		return w.Result().Cookies()[0]
 	}
 	valid := time.Now().Add(time.Hour).Unix()
-	approval := issue(map[string]any{"email": "lemon@example.com", "sub": "approval:ABCD-EFGH", "valid_until": valid,
+	approval := issue(map[string]any{"email": "approver@example.com", "sub": "approval:ABCD-EFGH", "valid_until": valid,
 		"auth_method": "approval", "allowed_subdomain": "app"})
-	google := issue(map[string]any{"email": "lemon@example.com", "sub": "123", "valid_until": valid, "auth_method": "google"})
+	google := issue(map[string]any{"email": "approver@example.com", "sub": "123", "valid_until": valid, "auth_method": "google"})
 
 	tests := []struct {
 		name      string
@@ -87,9 +87,9 @@ func TestLoginForScopedSession(t *testing.T) {
 		subdomain string
 		wantEmail string
 	}{
-		{"approval session on its subdomain", approval, "app", "lemon@example.com"},
+		{"approval session on its subdomain", approval, "app", "approver@example.com"},
 		{"approval session on another subdomain", approval, "other", ""},
-		{"google session anywhere", google, "other", "lemon@example.com"},
+		{"google session anywhere", google, "other", "approver@example.com"},
 	}
 	for _, tt := range tests {
 		req, _ := http.NewRequest("GET", "https://"+tt.subdomain+".example.com/", nil)

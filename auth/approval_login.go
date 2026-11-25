@@ -26,7 +26,7 @@ import (
 //  4. 申請者の待ち画面が次に更新されたとき、承認者のアドレスで、行き先のサブドメインだけに絞ったセッションが発行される
 const (
 	approvalTTL            = 10 * time.Minute // 要求の有効期間
-	approvalLoginValidity  = 24 * time.Hour   // 承認方式で入ったときのログインの有効期間（D-011）
+	approvalLoginValidity  = 24 * time.Hour   // 承認方式で入ったときのログインの有効期間（本人の Google ログインより弱い保証なので短くする）
 	approvalRefreshSeconds = 3                // 待ち画面の更新間隔
 
 	// 申請者のブラウザに入れる「コード.秘密の値」。秘密の値を持つブラウザだけがセッションを受け取れる
@@ -198,7 +198,7 @@ func (s *Server) StartApproval(w http.ResponseWriter, req *http.Request) {
 	}
 	subdomain, path := sanitizeReturnTo(req.PostForm.Get("s"), req.PostForm.Get("p"))
 	if subdomain == "" {
-		// 承認方式のセッションは行き先のサブドメインに絞るので、行き先がないと受け付けられない（D-012）
+		// 承認方式のセッションは行き先のサブドメインに絞るので、行き先がないと受け付けられない
 		WriteHttpError(w, NewHttpError(http.StatusBadRequest, "Open the service you want to use first, then request approval from its sign-in page", nil))
 		return
 	}
@@ -332,7 +332,7 @@ func (s *Server) approverOf(req *http.Request) *LoginSession {
 	return l
 }
 
-// canApprove は、承認者が行き先のサブドメイン（または *）を許可されているかを返す（D-009）。
+// canApprove は、承認者が行き先のサブドメイン（または *）を許可されているかを返す。
 func (s *Server) canApprove(approverEmail, subdomain string) bool {
 	subdomains, ok := s.authorities[approverEmail]
 	return ok && (slices.Contains(subdomains, subdomain) || slices.Contains(subdomains, "*"))

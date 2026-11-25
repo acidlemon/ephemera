@@ -347,7 +347,7 @@ func emailOrAnonymous(login *auth.LoginSession) string {
 }
 
 // loginFor は subdomain へのリクエストで使えるログインを返す。
-// 別のサブドメインに絞られたセッション（承認方式）は、ここではログインしていない扱いにする（D-017）。
+// 別のサブドメインに絞られたセッション（承認方式）は、ここではログインしていない扱いにする。
 func loginFor(req *http.Request, subdomain string) *auth.LoginSession {
 	l := auth.ExtractSession(req, store)
 	if !l.ValidFor(subdomain) {
