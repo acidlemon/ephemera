@@ -8,6 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.48.0
 	github.com/aws/aws-sdk-go-v2/config v1.33.21
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.116.0
+	github.com/aws/smithy-go v1.28.10
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/fujiwara/ridge v0.14.0
 	github.com/gorilla/securecookie v1.1.2
@@ -32,7 +33,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.39.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.44.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.53.0 // indirect
-	github.com/aws/smithy-go v1.28.10 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.9 // indirect
 	github.com/pires/go-proxyproto v0.16.0 // indirect
 )
