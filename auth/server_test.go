@@ -70,3 +70,93 @@ func TestWriteHttpErrorHidesDetail(t *testing.T) {
 		}
 	}
 }
+
+func newTestServer(t *testing.T) http.Handler {
+	t.Helper()
+	h, err := NewServer(&ServerOptions{
+		CookieStore:   NewCookieStore("0123456789abcdef0123456789abcdef"),
+		ClientID:      "client",
+		ClientSecret:  "secret",
+		HostSuffix:    "example.com",
+		AuthSubdomain: "auth",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return h
+}
+
+func TestStaticFilesAreServed(t *testing.T) {
+	h := newTestServer(t)
+	for _, p := range []string{"/auth/static/water.min.css", "/auth/static/ephemera.css"} {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest("GET", "https://auth.example.com"+p, nil))
+		if w.Code != http.StatusOK {
+			t.Errorf("%s: status = %d", p, w.Code)
+		}
+		if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/css") {
+			t.Errorf("%s: Content-Type = %q", p, ct)
+		}
+		if cc := w.Header().Get("Cache-Control"); !strings.HasPrefix(cc, "public") {
+			t.Errorf("%s: Cache-Control = %q", p, cc)
+		}
+	}
+}
+
+func TestCallbackPageScriptIsAllowedByCSP(t *testing.T) {
+	h := newTestServer(t)
+
+	// /auth/start で認証セッションを作る
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", "https://auth.example.com/auth/start?s=app&p=/", nil))
+	if w.Code != http.StatusFound {
+		t.Fatalf("start: status = %d", w.Code)
+	}
+	if loc := w.Header().Get("Location"); !strings.HasPrefix(loc, "https://accounts.google.com/") {
+		t.Fatalf("start: Location = %q", loc)
+	}
+
+	req := httptest.NewRequest("GET", "https://auth.example.com/auth/callback", nil)
+	for _, c := range w.Result().Cookies() {
+		req.AddCookie(c)
+	}
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("callback: status = %d", w.Code)
+	}
+	csp := w.Header().Get("Content-Security-Policy")
+	if !strings.Contains(csp, "script-src "+callbackScriptHash) {
+		t.Errorf("CSP does not allow callback script: %q", csp)
+	}
+	if !strings.Contains(csp, "form-action 'self' https://accounts.google.com https://*.example.com") {
+		t.Errorf("CSP form-action = %q", csp)
+	}
+	if !strings.Contains(w.Body.String(), "<script>"+callbackScript+"</script>") {
+		t.Errorf("callback page does not embed callbackScript verbatim")
+	}
+	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Errorf("Cache-Control = %q", cc)
+	}
+}
+
+func TestSignInPageHasNoInlineStyle(t *testing.T) {
+	h := newTestServer(t)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", "https://auth.example.com/auth/sign_in", nil))
+	body := w.Body.String()
+	if strings.Contains(body, "style=") || strings.Contains(body, "cdn.jsdelivr.net") {
+		t.Errorf("sign-in page has inline style or CDN reference")
+	}
+	if !strings.Contains(body, `href="/auth/static/water.min.css"`) {
+		t.Errorf("sign-in page does not link embedded css")
+	}
+}
+
+func TestErrorPageOutsideAuthServerHasCSP(t *testing.T) {
+	w := httptest.NewRecorder()
+	WriteHttpError(w, NewHttpError(http.StatusServiceUnavailable, "Failed to load configuration", nil))
+	if csp := w.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "form-action 'none'") {
+		t.Errorf("CSP = %q", csp)
+	}
+}
