@@ -11,6 +11,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -141,13 +142,41 @@ func fetchConfigRecords() ([]*HostRecord, AuthorityRecords, error) {
 	return hosts, authorities, nil
 }
 
+// IsExcludedPath は認証なしで通すパスかを判定する。
+// path はデコード済みのパス（req.URL.Path）。バックエンドにはエンコードされたままのパスが届くため、
+// デコード後に正規化されていないパス（"..", ".", "//", "..;" など）や、
+// バックエンドが別の解釈をしうる文字（"\\", 二重エンコードの "%"）を含むパスは、除外の対象にしない。
 func IsExcludedPath(excludePaths []string, path string) bool {
+	if !isCanonicalPath(path) {
+		return false
+	}
 	for _, p := range excludePaths {
 		if matchWildcard(p, path) {
 			return true
 		}
 	}
 	return false
+}
+
+// isCanonicalPath は path がそれ以上正規化の余地のないパスかを返す。
+func isCanonicalPath(p string) bool {
+	if !strings.HasPrefix(p, "/") || strings.ContainsAny(p, "\\%") {
+		return false
+	}
+	trimmed := p
+	if len(p) > 1 {
+		trimmed = strings.TrimSuffix(p, "/")
+	}
+	if path.Clean(trimmed) != trimmed {
+		return false
+	}
+	for _, seg := range strings.Split(trimmed, "/") {
+		// "..;" のようにパスパラメータ付きで ".." と解釈されうるもの
+		if strings.HasPrefix(seg, "..") {
+			return false
+		}
+	}
+	return true
 }
 
 // extractSubdomain は host が {label}.{suffix} の形ならその label を返す。

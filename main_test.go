@@ -19,11 +19,14 @@ func TestIsExcludedPath(t *testing.T) {
 		// single-level "*" (does not cross "/")
 		{"single wildcard match", []string{"/powawa/*/create"}, "/powawa/foo/create", true},
 		{"single wildcard no cross slash", []string{"/powawa/*/create"}, "/powawa/a/b/create", false},
-		{"single wildcard empty segment", []string{"/powawa/*/create"}, "/powawa//create", true},
+		// "//" を含むパスは正規化されていないので除外しない（実リクエストは ServeMux が先にリダイレクトする）
+		{"single wildcard empty segment", []string{"/powawa/*/create"}, "/powawa//create", false},
 		{"single wildcard suffix", []string{"/api/*"}, "/api/users", true},
 		{"single wildcard suffix no cross", []string{"/api/*"}, "/api/users/1", false},
-		{"single wildcard prefix", []string{"*.css"}, "style.css", true},
-		{"single wildcard prefix no cross", []string{"*.css"}, "a/style.css", false},
+		{"single wildcard prefix", []string{"/*.css"}, "/style.css", true},
+		{"single wildcard prefix no cross", []string{"/*.css"}, "/a/style.css", false},
+		// "/" で始まらないパスは除外しない（実リクエストのパスは必ず "/" で始まる）
+		{"relative path is never excluded", []string{"*.css"}, "style.css", false},
 		{"multiple single wildcards", []string{"/api/*/users/*"}, "/api/v1/users/42", true},
 		{"multiple single wildcards no cross", []string{"/api/*/users/*"}, "/api/v1/users/42/edit", false},
 
@@ -49,6 +52,30 @@ func TestIsExcludedPath(t *testing.T) {
 				t.Errorf("IsExcludedPath(%v, %q) = %v, want %v", tt.excludePaths, tt.path, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestIsExcludedPathRejectsNonCanonical(t *testing.T) {
+	excl := []string{"/public/**", "/health", "/"}
+	cases := map[string]bool{
+		"/public/x":            true,
+		"/public/a/b":          true,
+		"/public/":             true,
+		"/health":              true,
+		"/":                    true,
+		"/public/../admin":     false, // %2e%2e や ..%2f がデコードされた形
+		"/public/./x":          false,
+		"/public//x":           false,
+		"/public/..;/admin":    false,
+		"/public/..\\admin":    false,
+		"/public/%2e%2e/admin": false, // 二重エンコードがデコードされた形
+		"/public/...":          false,
+		"/admin":               false,
+	}
+	for p, want := range cases {
+		if got := IsExcludedPath(excl, p); got != want {
+			t.Errorf("IsExcludedPath(%q) = %v, want %v", p, got, want)
+		}
 	}
 }
 
