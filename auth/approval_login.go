@@ -50,8 +50,11 @@ func init() {
      through a channel you normally use (for example, a direct message), and ask them to approve it.
      You can copy it with right click.</p>
   <p><a href="{{ .ApprovalURL }}">{{ .ApprovalURL }}</a></p>
+  <p><button type="button" data-copy="{{ .ApprovalURL }}">Copy link</button></p>
   <p>Or tell them this code:</p>
   <p class="approval-code"><strong><code>{{ .Code }}</code></strong></p>
+  <p><button type="button" data-copy="{{ .Code }}">Copy code</button></p>
+  <script src="/auth/static/copy.js"></script>
   <p>This page checks for approval every few seconds. The request expires at {{ .ExpiresAt }}.</p>
 {{ end }}`))
 	approvalStatusPage = template.Must(template.Must(layout.Clone()).Parse(`{{ define "main" }}

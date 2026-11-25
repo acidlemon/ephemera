@@ -12,7 +12,7 @@ import (
 // 認証画面の CSS。外部 CDN に依存しないようバイナリに埋め込んで /auth/static/ から配信する。
 // water.min.css は water.css v2.1.1（MIT License）。
 //
-//go:embed static/*.css
+//go:embed static/*.css static/*.js
 var staticFiles embed.FS
 
 func staticHandler() http.Handler {
@@ -55,7 +55,8 @@ func setSecurityHeaders(h http.Header, hostSuffix string) {
 		"default-src 'none'",
 		"style-src 'self'",
 		"img-src data:",
-		"script-src " + callbackScriptHash,
+		// 'self' は /auth/static/ の埋め込みスクリプト（コピーボタン）用
+		"script-src 'self' " + callbackScriptHash,
 		"form-action " + formAction,
 		"frame-ancestors 'none'",
 		"base-uri 'none'",

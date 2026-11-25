@@ -88,13 +88,13 @@ func newTestServer(t *testing.T) http.Handler {
 
 func TestStaticFilesAreServed(t *testing.T) {
 	h := newTestServer(t)
-	for _, p := range []string{"/auth/static/water.min.css", "/auth/static/ephemera.css"} {
+	for _, p := range []string{"/auth/static/water.min.css", "/auth/static/ephemera.css", "/auth/static/copy.js"} {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest("GET", "https://auth.example.com"+p, nil))
 		if w.Code != http.StatusOK {
 			t.Errorf("%s: status = %d", p, w.Code)
 		}
-		if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/css") {
+		if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/css") && !strings.HasPrefix(ct, "text/javascript") {
 			t.Errorf("%s: Content-Type = %q", p, ct)
 		}
 		if cc := w.Header().Get("Cache-Control"); !strings.HasPrefix(cc, "public") {
@@ -126,7 +126,7 @@ func TestCallbackPageScriptIsAllowedByCSP(t *testing.T) {
 		t.Fatalf("callback: status = %d", w.Code)
 	}
 	csp := w.Header().Get("Content-Security-Policy")
-	if !strings.Contains(csp, "script-src "+callbackScriptHash) {
+	if !strings.Contains(csp, "script-src 'self' "+callbackScriptHash) {
 		t.Errorf("CSP does not allow callback script: %q", csp)
 	}
 	if !strings.Contains(csp, "form-action 'self' https://accounts.google.com https://*.example.com") {
