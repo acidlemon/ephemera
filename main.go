@@ -92,14 +92,20 @@ func initialize() {
 	storekey := MustEnv("EPHEMERA_SESSION_KEY")
 	store = auth.NewCookieStore(storekey)
 
-	// 承認方式のログイン（任意）。要求を設定用バケットの approvals/ に置くので、書き込み権限が要る
-	if os.Getenv("EPHEMERA_ENABLE_APPROVAL") == "true" {
+	// 承認方式のログイン（任意）。EPHEMERA_APPROVAL_BUCKET_NAME を設定すると有効になる。
+	// 要求はそのバケットの approvals/ に置く。設定用のバケットとは別の通常のバケットにすること
+	// （設定用のバケットに書き込み権限を与えると、hosts.json や authorities.json も書き換えられてしまうため。
+	// また、承認を1回限りにする条件付き書き込み（If-None-Match / If-Match）を使う）
+	if approvalBucket := os.Getenv("EPHEMERA_APPROVAL_BUCKET_NAME"); approvalBucket != "" {
+		if approvalBucket == bucketName {
+			log.Fatal("EPHEMERA_APPROVAL_BUCKET_NAME must differ from EPHEMERA_S3_EXPRESS_BUCKET_NAME")
+		}
 		cfg, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(region))
 		if err != nil {
 			log.Fatalf("failed to load AWS config for approval store: %v", err)
 		}
-		approvalStore = auth.NewS3ApprovalStore(s3.NewFromConfig(cfg), bucketName)
-		log.Printf("approval login is enabled (s3://%s/approvals/)", bucketName)
+		approvalStore = auth.NewS3ApprovalStore(s3.NewFromConfig(cfg), approvalBucket)
+		log.Printf("approval login is enabled (s3://%s/approvals/)", approvalBucket)
 	}
 
 	notFoundPage = `<!DOCTYPE html>

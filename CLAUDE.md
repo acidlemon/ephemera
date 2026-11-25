@@ -24,6 +24,7 @@ There are no tests in the codebase.
 
 Configuration is via environment variables (see `envrc.sample`):
 - `EPHEMERA_S3_EXPRESS_BUCKET_NAME` — S3 Express One Zone directory bucket holding `hosts.json` and `authorities.json` (read only; the old name `EPHEMERA_S3_BUCKET_NAME` is still accepted)
+- `EPHEMERA_APPROVAL_BUCKET_NAME` — Optional. General purpose S3 bucket for approval login requests (`approvals/`); setting it enables approval login
 - `EPHEMERA_HOST_SUFFIX` — Base domain for wildcard subdomains
 - `EPHEMERA_AUTH_SUBDOMAIN` — Subdomain name for the auth service
 - `EPHEMERA_SESSION_KEY` — Cookie encryption key
