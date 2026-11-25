@@ -101,6 +101,10 @@ func TestApprovalFlow(t *testing.T) {
 	if w.Code != http.StatusOK || w.Header().Get("Refresh") == "" || !strings.Contains(w.Body.String(), code) {
 		t.Fatalf("wait: status = %d, refresh = %q", w.Code, w.Header().Get("Refresh"))
 	}
+	// 承認ページへのリンク（コード付き）を右クリックでコピーできる
+	if link := `href="https://auth.example.com/auth/approval?code=` + code + `"`; !strings.Contains(w.Body.String(), link) {
+		t.Errorf("wait page has no approval link: %s", link)
+	}
 
 	// 承認者がコードを入力すると中身が出る（小文字・ハイフンなしでもよい）
 	lemon := e.googleSession("lemon@example.com")

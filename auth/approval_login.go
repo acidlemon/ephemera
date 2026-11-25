@@ -46,9 +46,11 @@ func init() {
 	layout := template.Must(template.New("layout").Parse(layoutHTML))
 	approvalWaitPage = template.Must(template.Must(layout.Clone()).Parse(`{{ define "main" }}
   <h2>Waiting for approval</h2>
-  <p>Send this code to a teammate who can access <strong>{{ .Destination }}</strong>
-     through a channel you normally use (for example, a direct message), and ask them to approve it at
-     <code>{{ .ApprovalURL }}</code>.</p>
+  <p>Send this link to a teammate who can access <strong>{{ .Destination }}</strong>
+     through a channel you normally use (for example, a direct message), and ask them to approve it.
+     You can copy it with right click.</p>
+  <p><a href="{{ .ApprovalURL }}">{{ .ApprovalURL }}</a></p>
+  <p>Or tell them this code:</p>
   <p class="approval-code"><strong><code>{{ .Code }}</code></strong></p>
   <p>This page checks for approval every few seconds. The request expires at {{ .ExpiresAt }}.</p>
 {{ end }}`))
@@ -277,7 +279,7 @@ func (s *Server) WaitApproval(w http.ResponseWriter, req *http.Request) {
 			"Heading":     "Ephemeral Gate",
 			"Code":        r.Code,
 			"Destination": s.destination(r.Subdomain, "/"),
-			"ApprovalURL": fmt.Sprintf("https://%s.%s/auth/approval", s.authSubdomain, s.hostSuffix),
+			"ApprovalURL": fmt.Sprintf("https://%s.%s/auth/approval?code=%s", s.authSubdomain, s.hostSuffix, r.Code),
 			"ExpiresAt":   r.ExpiresAt.In(approvalTimeZone).Format("15:04:05 MST"),
 		})
 	case ApprovalDenied:
