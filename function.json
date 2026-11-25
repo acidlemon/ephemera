@@ -12,7 +12,8 @@
       "EPHEMERA_AUTH_SUBDOMAIN": "{{ must_env `EPHEMERA_AUTH_SUBDOMAIN` }}",
       "EPHEMERA_SESSION_KEY": "{{ must_env `EPHEMERA_SESSION_KEY` }}",
       "EPHEMERA_CLIENT_ID": "{{ must_env `EPHEMERA_CLIENT_ID` }}",
-      "EPHEMERA_CLIENT_SECRET": "{{ must_env `EPHEMERA_CLIENT_SECRET` }}"
+      "EPHEMERA_CLIENT_SECRET": "{{ must_env `EPHEMERA_CLIENT_SECRET` }}",
+      "EPHEMERA_ENABLE_APPROVAL": "{{ env `EPHEMERA_ENABLE_APPROVAL` `false` }}"
     }
   }
 }

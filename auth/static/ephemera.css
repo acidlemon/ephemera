@@ -9,3 +9,8 @@ input[type=submit].google-signin:hover {
   cursor: pointer;
   border:0px none;
 }
+
+/* 承認方式の待ち画面に出すコード */
+.approval-code {
+  font-size: 2em;
+}

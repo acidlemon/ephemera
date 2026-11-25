@@ -50,6 +50,7 @@ var (
 	clientSecret   string
 	notFoundPage   string
 	originSecret   string
+	approvalStore  auth.ApprovalStore
 )
 
 // CloudFront などの手前のプロキシがオリジンに付けるヘッダー。
@@ -80,6 +81,16 @@ func initialize() {
 
 	storekey := MustEnv("EPHEMERA_SESSION_KEY")
 	store = auth.NewCookieStore(storekey)
+
+	// 承認方式のログイン（任意）。要求を設定用バケットの approvals/ に置くので、書き込み権限が要る
+	if os.Getenv("EPHEMERA_ENABLE_APPROVAL") == "true" {
+		cfg, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(region))
+		if err != nil {
+			log.Fatalf("failed to load AWS config for approval store: %v", err)
+		}
+		approvalStore = auth.NewS3ApprovalStore(s3.NewFromConfig(cfg), bucketName)
+		log.Printf("approval login is enabled (s3://%s/approvals/)", bucketName)
+	}
 
 	notFoundPage = `<!DOCTYPE html>
 <html>
@@ -364,6 +375,8 @@ func GeneralHandler(w http.ResponseWriter, req *http.Request) {
 			ClientSecret:  clientSecret,
 			HostSuffix:    hostSuffix,
 			AuthSubdomain: authSubdomain,
+			ApprovalStore: approvalStore,
+			Authorities:   authorities,
 		})
 		if err != nil {
 			auth.WriteHttpError(w, auth.NewHttpError(http.StatusInternalServerError, "Failed to initialize authentication", err))

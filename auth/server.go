@@ -28,6 +28,10 @@ type Server struct {
 	store         *sessions.CookieStore
 	authSubdomain string
 	hostSuffix    string
+
+	// 承認方式のログイン。approvals が設定されているときだけ有効
+	approvals   ApprovalStore
+	authorities map[string][]string
 }
 
 type ServerOptions struct {
@@ -36,6 +40,11 @@ type ServerOptions struct {
 	ClientSecret  string
 	HostSuffix    string
 	AuthSubdomain string
+
+	// 承認方式のログイン（任意）。ApprovalStore を設定すると有効になる。
+	// Authorities は authorities.json の内容（メールアドレス → 許可するサブドメインの一覧）。承認できる人の判定に使う。
+	ApprovalStore ApprovalStore
+	Authorities   map[string][]string
 }
 
 var (
@@ -65,6 +74,15 @@ func init() {
 		<input type="submit" value="" class="google-signin" aria-label="Sign in with Google" />
 	  </p>
 	</form>
+	{{ if .Approval }}
+	<h3>Or ask a teammate to let you in</h3>
+	<p>A teammate who can access this service approves your request, and you sign in as that teammate for this service only.</p>
+	<form method="post" action="/auth/approval/start">
+	  <input type="hidden" name="p" value="{{ .Path }}" />
+	  <input type="hidden" name="s" value="{{ .Subdomain }}" />
+	  <p><input type="submit" value="Request approval" /></p>
+	</form>
+	{{ end }}
 	{{ end }}`
 
 	layout := template.Must(template.New("layout").Parse(layoutHTML))
@@ -118,6 +136,8 @@ func NewServer(opts *ServerOptions) (http.Handler, error) {
 		store:         opts.CookieStore,
 		authSubdomain: opts.AuthSubdomain,
 		hostSuffix:    opts.HostSuffix,
+		approvals:     opts.ApprovalStore,
+		authorities:   opts.Authorities,
 	}
 
 	mux.Handle("/auth/static/", staticHandler())
@@ -125,6 +145,10 @@ func NewServer(opts *ServerOptions) (http.Handler, error) {
 	mux.HandleFunc("/auth/callback", server.CallbackAuth)
 	mux.HandleFunc("/auth/verify", server.VerifyAuth)
 	mux.HandleFunc("/auth/sign_in", server.SignIn)
+	mux.HandleFunc("/auth/approval", server.ApprovalPage)
+	mux.HandleFunc("/auth/approval/start", server.StartApproval)
+	mux.HandleFunc("/auth/approval/wait", server.WaitApproval)
+	mux.HandleFunc("/auth/approval/decide", server.DecideApproval)
 	mux.HandleFunc("/auth/unauthorized", server.Unauthorized)
 	mux.HandleFunc("/", server.DefaultPage)
 
@@ -328,11 +352,17 @@ func (s *Server) SignIn(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
 
+	approval := ""
+	if s.approvalEnabled() && subdomain != "" {
+		// 承認方式のセッションは行き先に絞るので、行き先があるときだけ出す
+		approval = "1"
+	}
 	signInPage.Execute(w, map[string]string{
 		"Title":     "Authorization Required - Ephemeral Gate",
 		"Heading":   "Authorization Required",
 		"Path":      path,
 		"Subdomain": subdomain,
+		"Approval":  approval,
 	})
 }
 

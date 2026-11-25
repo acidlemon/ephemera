@@ -9,6 +9,11 @@ export EPHEMERA_SESSION_KEY=""
 export EPHEMERA_CLIENT_ID=""
 export EPHEMERA_CLIENT_SECRET=""
 
+# 承認方式のログイン（任意）。true で有効。
+# 要求を EPHEMERA_S3_BUCKET_NAME の approvals/ に置くので、Lambda ロールに approvals/* への s3:PutObject が要る。
+# approvals/ を1日で消すライフサイクルルールも設定すること
+export EPHEMERA_ENABLE_APPROVAL="false"
+
 # ECS へのデプロイ（task deploy-ecs / diff-ecs / verify-ecs）
 export AWS_ACCOUNT_ID=""
 export AWS_REGION="ap-northeast-1"
