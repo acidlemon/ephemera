@@ -46,6 +46,8 @@ tasks:
   # 必要な環境変数: AWS_ACCOUNT_ID, AWS_REGION, EPHEMERA_SSM_PREFIX（deploy/ecs/ecspresso.yml を参照）
   deploy-ecs:
     preconditions:
+      - sh: test -n "$AWS_ACCOUNT_ID" -a -n "$AWS_REGION" -a -n "$EPHEMERA_SSM_PREFIX"
+        msg: "AWS_ACCOUNT_ID, AWS_REGION, EPHEMERA_SSM_PREFIX を設定してください（envrc.sample を参照）"
       - sh: aws ecr describe-images --region {{ .AWS_REGION }} --repository-name ephemera --image-ids imageTag={{ .GIT_SHA }} >/dev/null 2>&1
         msg: "ECR に ephemera:{{ .GIT_SHA }} がありません。先に task push-image を実行してください"
     cmds:
@@ -53,11 +55,17 @@ tasks:
 
   # デプロイ前に、リポジトリの定義と ECS 上の今の定義の違いを見る
   diff-ecs:
+    preconditions:
+      - sh: test -n "$AWS_ACCOUNT_ID" -a -n "$AWS_REGION" -a -n "$EPHEMERA_SSM_PREFIX"
+        msg: "AWS_ACCOUNT_ID, AWS_REGION, EPHEMERA_SSM_PREFIX を設定してください（envrc.sample を参照）"
     cmds:
       - IMAGE_TAG={{ .GIT_SHA }} {{ .ECSPRESSO }} diff
 
   # ロール・イメージ・SSM パラメータなど、定義が参照するものが使えるかを確かめる
   verify-ecs:
+    preconditions:
+      - sh: test -n "$AWS_ACCOUNT_ID" -a -n "$AWS_REGION" -a -n "$EPHEMERA_SSM_PREFIX"
+        msg: "AWS_ACCOUNT_ID, AWS_REGION, EPHEMERA_SSM_PREFIX を設定してください（envrc.sample を参照）"
     cmds:
       - IMAGE_TAG={{ .GIT_SHA }} {{ .ECSPRESSO }} verify
 
