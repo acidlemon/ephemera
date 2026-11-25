@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -46,7 +48,13 @@ var (
 	clientID       string
 	clientSecret   string
 	notFoundPage   string
+	originSecret   string
 )
+
+// CloudFront などの手前のプロキシがオリジンに付けるヘッダー。
+// EPHEMERA_ORIGIN_SECRET を設定すると、この値が一致しないリクエストは受け付けない。
+// "X-Ephemera-" で始まるのでバックエンドへの転送時には取り除かれる。
+const headerOriginSecret = "X-Ephemera-Origin-Secret"
 
 func MustEnv(key string) string {
 	value := os.Getenv(key)
@@ -65,6 +73,9 @@ func initialize() {
 	authSubdomain = MustEnv("EPHEMERA_AUTH_SUBDOMAIN")
 	clientID = MustEnv("EPHEMERA_CLIENT_ID")
 	clientSecret = MustEnv("EPHEMERA_CLIENT_SECRET")
+
+	// 任意。設定すると手前のプロキシを経由しない直接アクセスを拒否する
+	originSecret = os.Getenv("EPHEMERA_ORIGIN_SECRET")
 
 	storekey := MustEnv("EPHEMERA_SESSION_KEY")
 	store = auth.NewCookieStore(storekey)
@@ -137,6 +148,25 @@ func IsExcludedPath(excludePaths []string, path string) bool {
 		}
 	}
 	return false
+}
+
+// extractSubdomain は host が {label}.{suffix} の形ならその label を返す。
+// ポート番号と末尾の "." は無視し、大小文字は区別しない。label が複数段（a.b.{suffix}）なら不一致とする。
+func extractSubdomain(host, suffix string) (string, bool) {
+	host = strings.ToLower(host)
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.TrimSuffix(host, ".")
+	suffix = "." + strings.Trim(strings.ToLower(suffix), ".")
+	if !strings.HasSuffix(host, suffix) {
+		return "", false
+	}
+	label := strings.TrimSuffix(host, suffix)
+	if label == "" || strings.Contains(label, ".") {
+		return "", false
+	}
+	return label, true
 }
 
 // wildcardCache caches compiled regexes keyed by pattern. A nil value means
@@ -241,6 +271,13 @@ func emailOrAnonymous(login *auth.LoginSession) string {
 }
 
 func GeneralHandler(w http.ResponseWriter, req *http.Request) {
+	if originSecret != "" &&
+		subtle.ConstantTimeCompare([]byte(req.Header.Get(headerOriginSecret)), []byte(originSecret)) != 1 {
+		log.Printf("rejected request without valid origin secret host=%q", req.Host)
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
 	hosts, authorities, err := fetchConfigRecords()
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
@@ -253,14 +290,14 @@ func GeneralHandler(w http.ResponseWriter, req *http.Request) {
 	if reqHost == "" {
 		reqHost = req.Host
 	}
-	if !strings.HasSuffix(reqHost, hostSuffix) {
+	subdomain, ok := extractSubdomain(reqHost, hostSuffix)
+	if !ok {
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte(notFoundPage))
 		return
 	}
 
 	// check auth subdomain
-	subdomain := strings.Split(reqHost, ".")[0]
 	if subdomain == authSubdomain {
 		authServer, err := auth.NewServer(&auth.ServerOptions{
 			CookieStore:   store,

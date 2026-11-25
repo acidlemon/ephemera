@@ -51,3 +51,28 @@ func TestIsExcludedPath(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractSubdomain(t *testing.T) {
+	cases := []struct {
+		host, suffix string
+		want         string
+		ok           bool
+	}{
+		{"app.example.com", "example.com", "app", true},
+		{"App.Example.com", "example.com", "app", true},
+		{"app.example.com:443", "example.com", "app", true},
+		{"app.example.com.", "example.com", "app", true},
+		{"app.example.com", ".example.com", "app", true},
+		{"app.evilexample.com", "example.com", "", false},
+		{"evilexample.com", "example.com", "", false},
+		{"example.com", "example.com", "", false},
+		{"a.b.example.com", "example.com", "", false},
+		{"app.example.com.evil.net", "example.com", "", false},
+	}
+	for _, c := range cases {
+		got, ok := extractSubdomain(c.host, c.suffix)
+		if got != c.want || ok != c.ok {
+			t.Errorf("extractSubdomain(%q, %q) = (%q, %v), want (%q, %v)", c.host, c.suffix, got, ok, c.want, c.ok)
+		}
+	}
+}
