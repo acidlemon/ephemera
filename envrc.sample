@@ -1,7 +1,8 @@
 export EPHEMERA_LAMBDA_ROLE_ARN=""
 export EPHEMERA_FUNCTION_NAME=""
 
-export EPHEMERA_S3_BUCKET_NAME=""
+# hosts.json と authorities.json を置く設定用のバケット（S3 Express One Zone のディレクトリバケット）。読むだけ
+export EPHEMERA_S3_EXPRESS_BUCKET_NAME=""
 export EPHEMERA_HOST_SUFFIX=""
 export EPHEMERA_AUTH_SUBDOMAIN=""
 
@@ -10,7 +11,7 @@ export EPHEMERA_CLIENT_ID=""
 export EPHEMERA_CLIENT_SECRET=""
 
 # 承認方式のログイン（任意）。true で有効。
-# 要求を EPHEMERA_S3_BUCKET_NAME の approvals/ に置くので、Lambda ロールに approvals/* への s3:PutObject と s3:GetObject が要る。
+# 要求を EPHEMERA_S3_EXPRESS_BUCKET_NAME の approvals/ に置くので、Lambda ロールに approvals/* への s3:PutObject と s3:GetObject が要る。
 # approvals/ を1日で消すライフサイクルルールも設定すること
 export EPHEMERA_ENABLE_APPROVAL="false"
 

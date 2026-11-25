@@ -70,7 +70,17 @@ func initialize() {
 	hostsKey = "hosts.json"
 	authoritiesKey = "authorities.json"
 
-	bucketName = MustEnv("EPHEMERA_S3_BUCKET_NAME")
+	// 設定用のバケット（S3 Express One Zone のディレクトリバケット）。読むだけ
+	bucketName = os.Getenv("EPHEMERA_S3_EXPRESS_BUCKET_NAME")
+	if bucketName == "" {
+		// 移行のあいだは古い名前も受け付ける
+		if bucketName = os.Getenv("EPHEMERA_S3_BUCKET_NAME"); bucketName != "" {
+			log.Println("EPHEMERA_S3_BUCKET_NAME is deprecated; use EPHEMERA_S3_EXPRESS_BUCKET_NAME")
+		}
+	}
+	if bucketName == "" {
+		log.Fatal("EPHEMERA_S3_EXPRESS_BUCKET_NAME is not set")
+	}
 	hostSuffix = MustEnv("EPHEMERA_HOST_SUFFIX")
 	authSubdomain = MustEnv("EPHEMERA_AUTH_SUBDOMAIN")
 	clientID = MustEnv("EPHEMERA_CLIENT_ID")

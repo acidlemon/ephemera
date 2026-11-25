@@ -7,7 +7,7 @@
   "Timeout": 120,
   "Environment": {
     "Variables": {
-      "EPHEMERA_S3_BUCKET_NAME": "{{ must_env `EPHEMERA_S3_BUCKET_NAME` }}",
+      "EPHEMERA_S3_EXPRESS_BUCKET_NAME": "{{ must_env `EPHEMERA_S3_EXPRESS_BUCKET_NAME` }}",
       "EPHEMERA_HOST_SUFFIX": "{{ must_env `EPHEMERA_HOST_SUFFIX` }}",
       "EPHEMERA_AUTH_SUBDOMAIN": "{{ must_env `EPHEMERA_AUTH_SUBDOMAIN` }}",
       "EPHEMERA_SESSION_KEY": "{{ must_env `EPHEMERA_SESSION_KEY` }}",
