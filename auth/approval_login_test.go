@@ -366,3 +366,31 @@ func TestRequesterIP(t *testing.T) {
 		}
 	}
 }
+
+func TestIsSameOriginRequest(t *testing.T) {
+	e := newApprovalEnv(t)
+	tests := []struct {
+		name    string
+		headers map[string]string
+		want    bool
+	}{
+		// 認証画面は Referrer-Policy: no-referrer なので、同じサイトのフォーム送信でも Origin が null になる
+		{"same-origin with null origin", map[string]string{"Sec-Fetch-Site": "same-origin", "Origin": "null"}, true},
+		{"same-origin", map[string]string{"Sec-Fetch-Site": "same-origin", "Origin": "https://auth.example.com"}, true},
+		{"cross-site", map[string]string{"Sec-Fetch-Site": "cross-site", "Origin": "https://auth.example.com"}, false},
+		{"same-site (other subdomain)", map[string]string{"Sec-Fetch-Site": "same-site"}, false},
+		{"old browser, same origin", map[string]string{"Origin": "https://auth.example.com"}, true},
+		{"old browser, other origin", map[string]string{"Origin": "https://evil.example.net"}, false},
+		{"old browser, null origin", map[string]string{"Origin": "null"}, false},
+		{"no headers", nil, true},
+	}
+	for _, tt := range tests {
+		req := httptest.NewRequest("POST", "https://auth.example.com/auth/approval/start", nil)
+		for k, v := range tt.headers {
+			req.Header.Set(k, v)
+		}
+		if got := e.s.isSameOriginRequest(req); got != tt.want {
+			t.Errorf("%s: isSameOriginRequest() = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}

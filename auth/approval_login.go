@@ -98,15 +98,18 @@ func (s *Server) approvalEnabled() bool {
 	return s.approvals != nil
 }
 
-// isSameOriginRequest は、ブラウザが付ける Sec-Fetch-Site / Origin から、
-// 自分（認証サブドメイン）のページから送られたリクエストかを判定する。どちらのヘッダーもなければ許可する。
+// isSameOriginRequest は、自分（認証サブドメイン）のページから送られたリクエストかを判定する。
+//
+// Sec-Fetch-Site があればそれだけで判定する（いまのブラウザは必ず付ける）。
+// 認証画面は Referrer-Policy: no-referrer なので、同じサイトの中のフォーム送信でも Origin が "null" になる。
+// そのため Origin は、Sec-Fetch-Site を付けない古いブラウザのときだけ見る（"null" は弾く）。
+// どちらのヘッダーもなければ許可する。
 func (s *Server) isSameOriginRequest(req *http.Request) bool {
-	if site := req.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" {
-		return false
+	if site := req.Header.Get("Sec-Fetch-Site"); site != "" {
+		return site == "same-origin"
 	}
-	if origin := req.Header.Get("Origin"); origin != "" &&
-		origin != fmt.Sprintf("https://%s.%s", s.authSubdomain, s.hostSuffix) {
-		return false
+	if origin := req.Header.Get("Origin"); origin != "" {
+		return origin == fmt.Sprintf("https://%s.%s", s.authSubdomain, s.hostSuffix)
 	}
 	return true
 }
