@@ -40,10 +40,13 @@ tasks:
       - lambroll deploy --envfile .env
 
   # ECS（クラスター brightest / サービス ephemera）へ ecspresso でデプロイする。
+  # イメージの push はしない。先に push の権限がある環境で task push-image を実行しておくこと。
+  # いまのコミットのハッシュのタグのイメージが ECR にあることを確かめてからデプロイする（読み取り権限で足りる）。
   # 必要な環境変数: AWS_ACCOUNT_ID, AWS_REGION, EPHEMERA_SSM_PREFIX（deploy/ecs/ecspresso.yml を参照）
   deploy-ecs:
-    deps:
-      - push-image
+    preconditions:
+      - sh: aws ecr describe-images --region {{ .AWS_REGION }} --repository-name ephemera --image-ids imageTag={{ .GIT_SHA }} >/dev/null 2>&1
+        msg: "ECR に ephemera:{{ .GIT_SHA }} がありません。先に task push-image を実行してください"
     cmds:
       - IMAGE_TAG={{ .GIT_SHA }} {{ .ECSPRESSO }} deploy
 
