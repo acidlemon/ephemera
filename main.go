@@ -262,8 +262,9 @@ const ephemeraCookiePrefix = "ephemera_"
 
 // バックエンドにログイン中のユーザーを伝えるヘッダー
 const (
-	headerEphemeraEmail = "X-Ephemera-Email"
-	headerEphemeraSub   = "X-Ephemera-Sub"
+	headerEphemeraEmail      = "X-Ephemera-Email"
+	headerEphemeraSub        = "X-Ephemera-Sub"
+	headerEphemeraAuthMethod = "X-Ephemera-Auth-Method" // google / approval（承認方式で、承認者のアドレスとして通った）
 )
 
 // prepareUpstreamRequest はバックエンドに転送する前のリクエストを整える。
@@ -285,6 +286,7 @@ func prepareUpstreamRequest(req *http.Request, login *auth.LoginSession) {
 	if login != nil && login.Email != "" {
 		req.Header.Set(headerEphemeraEmail, login.Email)
 		req.Header.Set(headerEphemeraSub, login.Sub)
+		req.Header.Set(headerEphemeraAuthMethod, login.AuthMethod)
 	}
 }
 
@@ -301,6 +303,13 @@ func stripEphemeraCookies(h http.Header) {
 	if len(kept) > 0 {
 		h.Set("Cookie", strings.Join(kept, "; "))
 	}
+}
+
+func orDash(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
 }
 
 func emailOrAnonymous(login *auth.LoginSession) string {
@@ -359,6 +368,10 @@ func GeneralHandler(w http.ResponseWriter, req *http.Request) {
 		if host.Subdomain == subdomain && host.ExpireAt.After(now) {
 			// need auth?
 			loginSession := auth.ExtractSession(req, store)
+			if !loginSession.ValidFor(subdomain) {
+				// 別のサブドメインに絞られたセッション（承認方式）は、ここではログインしていない扱いにする（D-017）
+				loginSession = &auth.LoginSession{}
+			}
 			if !IsExcludedPath(host.ExcludePaths, req.URL.Path) {
 				if loginSession.Email == "" {
 					// not logged in
@@ -394,8 +407,10 @@ func GeneralHandler(w http.ResponseWriter, req *http.Request) {
 			}
 
 			prepareUpstreamRequest(req, loginSession)
-			log.Printf("access subdomain=%s method=%s path=%q email=%s remote=%q",
-				subdomain, req.Method, req.URL.Path, emailOrAnonymous(loginSession), req.Header.Get("X-Forwarded-For"))
+			// auth=approval のときの email は承認者。sub（approval:<コード>）で要求を特定できる
+			log.Printf("access subdomain=%s method=%s path=%q email=%s auth=%s sub=%q remote=%q",
+				subdomain, req.Method, req.URL.Path, emailOrAnonymous(loginSession), orDash(loginSession.AuthMethod),
+				loginSession.Sub, req.Header.Get("X-Forwarded-For"))
 
 			destUrl, _ := url.Parse("http://" + host.Target)
 			rp := httputil.NewSingleHostReverseProxy(destUrl)

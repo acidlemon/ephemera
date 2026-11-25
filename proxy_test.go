@@ -16,7 +16,7 @@ func TestPrepareUpstreamRequest(t *testing.T) {
 	req.Header["X_Ephemera_Email"] = []string{"attacker@example.com"}
 	req.Header["x-ephemera-sub"] = []string{"999"}
 
-	prepareUpstreamRequest(req, &auth.LoginSession{Email: "user@example.com", Sub: "123"})
+	prepareUpstreamRequest(req, &auth.LoginSession{Email: "user@example.com", Sub: "123", AuthMethod: auth.AuthMethodGoogle})
 
 	if got := req.Header.Get("Cookie"); got != "app_sid=abc; theme=dark" {
 		t.Errorf("Cookie = %q", got)
@@ -26,6 +26,9 @@ func TestPrepareUpstreamRequest(t *testing.T) {
 	}
 	if got := req.Header.Get("X-Ephemera-Sub"); got != "123" {
 		t.Errorf("X-Ephemera-Sub = %q", got)
+	}
+	if got := req.Header.Get("X-Ephemera-Auth-Method"); got != "google" {
+		t.Errorf("X-Ephemera-Auth-Method = %q", got)
 	}
 	if got := req.Header.Get("X-Ephemera-Admin"); got != "" {
 		t.Errorf("X-Ephemera-Admin should be removed, got %q", got)

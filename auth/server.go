@@ -264,7 +264,22 @@ func (s *Server) VerifyAuth(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	s.completeLogin(w, req, token.Email, token.Sub, googleLoginValidity, subdomain, path)
+	s.completeLogin(w, req, loginGrant{
+		Email:    token.Email,
+		Sub:      token.Sub,
+		Method:   AuthMethodGoogle,
+		Validity: googleLoginValidity,
+	}, subdomain, path)
+}
+
+// loginGrant はログインセッションに入れる内容。
+type loginGrant struct {
+	Email    string
+	Sub      string // ログイン方法ごとに一意な識別子（Google なら sub クレーム、承認方式なら "approval:<コード>"）
+	Method   string // AuthMethodGoogle / AuthMethodApproval
+	Validity time.Duration
+	// AllowedSubdomain が空でなければ、セッションをそのサブドメインだけに絞る
+	AllowedSubdomain string
 }
 
 // Google でログインしたときのログインの有効期間
@@ -273,8 +288,7 @@ const googleLoginValidity = 7 * 24 * time.Hour
 // completeLogin はログインを確定する。ログインセッション（ephemera_session）を作り、
 // 戻り先 https://{subdomain}.{hostSuffix}{path} へリダイレクトする。
 // subdomain と path は sanitizeReturnTo を通した値を渡すこと（subdomain が空なら認証サブドメインに戻る）。
-// sub はログイン方法ごとに一意な識別子（Google なら sub クレーム、メールなら "email:アドレス"）。
-func (s *Server) completeLogin(w http.ResponseWriter, req *http.Request, email, sub string, validity time.Duration, subdomain, path string) {
+func (s *Server) completeLogin(w http.ResponseWriter, req *http.Request, g loginGrant, subdomain, path string) {
 	if subdomain == "" {
 		subdomain = s.authSubdomain
 	}
@@ -287,9 +301,11 @@ func (s *Server) completeLogin(w http.ResponseWriter, req *http.Request, email, 
 	commonSession.Options.Domain = s.hostSuffix
 	commonSession.Options.MaxAge = 60 * 60 * 24 * 30
 	commonSession.Options.SameSite = http.SameSiteLaxMode
-	commonSession.Values["email"] = email
-	commonSession.Values["sub"] = sub
-	commonSession.Values["valid_until"] = time.Now().Add(validity).Unix()
+	commonSession.Values["email"] = g.Email
+	commonSession.Values["sub"] = g.Sub
+	commonSession.Values["valid_until"] = time.Now().Add(g.Validity).Unix()
+	commonSession.Values["auth_method"] = g.Method
+	commonSession.Values["allowed_subdomain"] = g.AllowedSubdomain
 	if err := commonSession.Save(req, w); err != nil {
 		WriteHttpError(w, NewHttpError(http.StatusInternalServerError, "Write Common Session Error", err))
 		return
