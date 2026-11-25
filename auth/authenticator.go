@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/base64"
 	"strings"
 	"time"
@@ -38,7 +39,8 @@ func NewAuthenticator(conf *oauth2.Config, provider OIDCProvider) *Authenticator
 }
 
 // OpenID Connectを利用した認証の開始
-func (a *Authenticator) StartAuthentication() (string, string, time.Time) {
+// state, nonce, 認可URL, 有効期限を返す。state と nonce は呼び出し側でセッションに保存すること。
+func (a *Authenticator) StartAuthentication() (string, string, string, time.Time) {
 	state := base64.StdEncoding.EncodeToString(securecookie.GenerateRandomKey(24))
 	nonce := base64.StdEncoding.EncodeToString(securecookie.GenerateRandomKey(24))
 
@@ -50,17 +52,26 @@ func (a *Authenticator) StartAuthentication() (string, string, time.Time) {
 	)
 	expiresAt := time.Now().Add(5 * time.Minute)
 
-	return state, u, expiresAt
+	return state, nonce, u, expiresAt
 }
 
 // OpenID Connectの認証結果の検証
-func (a *Authenticator) VerifyAuthentication(ctx context.Context, rawIDToken string) (*openIDToken, error) {
-	var verifier = a.provider.Verifier(&oidc.Config{ClientID: a.oidcConf.ClientID, InsecureSkipSignatureCheck: true})
+// 署名・発行者・audience・有効期限に加え、開始時に発行した nonce と一致するかを検証する。
+func (a *Authenticator) VerifyAuthentication(ctx context.Context, rawIDToken string, expectedNonce string) (*openIDToken, error) {
+	if expectedNonce == "" {
+		return nil, errors.New("no nonce in session")
+	}
 
-	// Parse and verify ID Token payload.
+	var verifier = a.provider.Verifier(&oidc.Config{ClientID: a.oidcConf.ClientID})
+
+	// Parse and verify ID Token (signature, issuer, audience, expiry).
 	idToken, err := verifier.Verify(ctx, rawIDToken)
 	if err != nil {
 		return nil, errors.Wrap(err, "Verification failed")
+	}
+
+	if subtle.ConstantTimeCompare([]byte(idToken.Nonce), []byte(expectedNonce)) != 1 {
+		return nil, errors.New("nonce mismatch")
 	}
 
 	// Extract custom claims
@@ -68,6 +79,10 @@ func (a *Authenticator) VerifyAuthentication(ctx context.Context, rawIDToken str
 	if err := idToken.Claims(&claims); err != nil {
 		// handle error
 		return nil, err
+	}
+
+	if claims.Email == "" || !claims.Verified {
+		return nil, errors.New("email is not verified")
 	}
 
 	// normalize issuer (remove "https://" for Google)

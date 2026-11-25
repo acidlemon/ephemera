@@ -123,9 +123,10 @@ func (s *Server) StartAuth(w http.ResponseWriter, req *http.Request) {
 	}
 	subdomain := req.Form.Get("s")
 
-	state, url, expiresAt := s.a.StartAuthentication()
+	state, nonce, url, expiresAt := s.a.StartAuthentication()
 	session, _ := s.store.New(req, authSessionName)
 	session.Values["state"] = state
+	session.Values["nonce"] = nonce
 	session.Values["return_path"] = path
 	session.Values["return_subdomain"] = subdomain
 	session.Values["expires_at"] = expiresAt.Unix()
@@ -229,8 +230,9 @@ func (s *Server) VerifyAuth(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	nonce, _ := session.Values["nonce"].(string)
 	rawIDToken := req.Form.Get("id_token")
-	token, err := s.a.VerifyAuthentication(req.Context(), rawIDToken)
+	token, err := s.a.VerifyAuthentication(req.Context(), rawIDToken, nonce)
 	if err != nil {
 		WriteHttpError(w, NewHttpError(http.StatusForbidden, "Verification Error", err))
 		return
