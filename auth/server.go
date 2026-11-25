@@ -8,6 +8,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -69,6 +71,22 @@ func init() {
 	signInPage = template.Must(template.Must(layout.Clone()).Parse(signInTmpl))
 }
 
+// サブドメインとして使えるラベル（英数字とハイフン、先頭末尾は英数字）
+var subdomainPattern = regexp.MustCompile(`^(?i)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+
+// sanitizeReturnTo はログイン後の戻り先を検証し、安全でない値を既定値に置き換える。
+// サブドメインが不正なら ""（認証サブドメインに戻る）、パスが不正なら "/" を返す。
+// https://{subdomain}.{hostSuffix}{path} を組み立てたときに別ホストへ飛ばないようにするため。
+func sanitizeReturnTo(subdomain, path string) (string, string) {
+	if !subdomainPattern.MatchString(subdomain) {
+		subdomain = ""
+	}
+	if !strings.HasPrefix(path, "/") || strings.ContainsAny(path, "\\\x00\r\n\t") {
+		path = "/"
+	}
+	return subdomain, path
+}
+
 func NewCookieStore(key string) *sessions.CookieStore {
 	store := sessions.NewCookieStore([]byte(key))
 	store.Options.HttpOnly = true
@@ -117,11 +135,7 @@ func (s *Server) StartAuth(w http.ResponseWriter, req *http.Request) {
 		WriteHttpError(w, NewHttpError(http.StatusBadRequest, "Body Parsing Error", err))
 		return
 	}
-	path := req.Form.Get("p")
-	if path == "" {
-		path = "/"
-	}
-	subdomain := req.Form.Get("s")
+	subdomain, path := sanitizeReturnTo(req.Form.Get("s"), req.Form.Get("p"))
 
 	state, nonce, url, expiresAt := s.a.StartAuthentication()
 	session, _ := s.store.New(req, authSessionName)
@@ -238,13 +252,11 @@ func (s *Server) VerifyAuth(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	subdomain := session.Values["return_subdomain"].(string)
+	returnSubdomain, _ := session.Values["return_subdomain"].(string)
+	returnPath, _ := session.Values["return_path"].(string)
+	subdomain, path := sanitizeReturnTo(returnSubdomain, returnPath)
 	if subdomain == "" {
 		subdomain = s.authSubdomain
-	}
-	path := session.Values["return_path"].(string)
-	if path == "" {
-		path = "/"
 	}
 
 	// delete authetication session
