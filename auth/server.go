@@ -160,17 +160,23 @@ func (s *Server) CallbackAuth(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	expireAtUnix := session.Values["expires_at"].(int64)
-	expireAt := time.Unix(expireAtUnix, 0)
-	if time.Now().Sub(expireAt) > 0 {
-		WriteHttpError(w, fmt.Errorf("Authentication Session timeout"))
+	expireAtUnix, ok := session.Values["expires_at"].(int64)
+	if !ok {
+		WriteHttpError(w, NewHttpError(http.StatusForbidden, "No Session", nil))
+		return
+	}
+	if time.Now().After(time.Unix(expireAtUnix, 0)) {
+		WriteHttpError(w, NewHttpError(http.StatusForbidden, "Authentication Session timeout", nil))
 		return
 	}
 
 	// set CSRF token
 	CSRFToken := base64.StdEncoding.EncodeToString(securecookie.GenerateRandomKey(24))
 	session.Values["csrf_token"] = CSRFToken
-	session.Save(req, w)
+	if err := session.Save(req, w); err != nil {
+		WriteHttpError(w, NewHttpError(http.StatusInternalServerError, "Write Auth Session Error", err))
+		return
+	}
 
 	// write postback HTML
 	w.Header().Set("Content-Type", "text/html; charset=UTF-8")
@@ -214,14 +220,14 @@ func (s *Server) VerifyAuth(w http.ResponseWriter, req *http.Request) {
 		WriteHttpError(w, NewHttpError(http.StatusForbidden, "No Session", err))
 		return
 	}
-	state := session.Values["state"].(string)
+	state, _ := session.Values["state"].(string)
 	if state == "" {
-		WriteHttpError(w, NewHttpError(http.StatusForbidden, "No Session State", err))
+		WriteHttpError(w, NewHttpError(http.StatusForbidden, "No Session State", nil))
 		return
 	}
-	csrfToken := session.Values["csrf_token"].(string)
+	csrfToken, _ := session.Values["csrf_token"].(string)
 	if csrfToken == "" {
-		WriteHttpError(w, NewHttpError(http.StatusForbidden, "No CSRF Token", err))
+		WriteHttpError(w, NewHttpError(http.StatusForbidden, "No CSRF Token", nil))
 		return
 	}
 
@@ -237,10 +243,9 @@ func (s *Server) VerifyAuth(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	expireAtUnix := session.Values["expires_at"].(int64)
-	expireAt := time.Unix(expireAtUnix, 0)
-	if time.Now().Sub(expireAt) > 0 {
-		WriteHttpError(w, fmt.Errorf("Authentication Session timeout"))
+	expireAtUnix, ok := session.Values["expires_at"].(int64)
+	if !ok || time.Now().After(time.Unix(expireAtUnix, 0)) {
+		WriteHttpError(w, NewHttpError(http.StatusForbidden, "Authentication Session timeout", nil))
 		return
 	}
 
