@@ -12,7 +12,7 @@ export EPHEMERA_CLIENT_SECRET=""
 
 # 承認方式のログイン（任意）。承認の要求を置くバケットを設定すると有効になる。
 # 設定用のバケットとは別の、通常の（汎用）バケットにすること。要求はその approvals/ に置く。
-# Lambda ロールに approvals/* への s3:PutObject と s3:GetObject が要る。
+# ECS のタスクロールに、このバケットの approvals/* への s3:PutObject と s3:GetObject が要る。
 # approvals/ を1日で消すライフサイクルルールも設定すること
 export EPHEMERA_APPROVAL_BUCKET_NAME=""
 
